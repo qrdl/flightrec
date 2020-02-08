@@ -1,0 +1,62 @@
+##########################################################################
+#
+#  File:       	Makefile
+#
+#  Project:    	Flight recorder (https://github.com/qrdl/flightrec)
+#
+#  Descr:      	Examine makefile
+#
+#  Notes:
+#
+##########################################################################
+#
+#  Copyright (C) 2017-2020 Ilya Caramishev (ilya@qrdl.com)
+#
+#  This program is free software: you can redistribute it and/or modify
+#  it under the terms of the GNU Affero General Public License as
+#  published by the Free Software Foundation, either version 3 of the
+#  License, or (at your option) any later version.
+#
+#  This program is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU Affero General Public License for more details.
+#
+#  You should have received a copy of the GNU Affero General Public License
+#  along with this program.  If not, see <https://www.gnu.org/licenses/>.
+#
+##########################################################################
+CFLAGS := -Wall -Wextra -Wno-format-security -g3 -I../dab -I../stingray -I..
+LDLIBS := -lsqlite3 -ldwarf -lelf -ljson-c
+LDFLAGS := -pthread
+
+.PHONY: all clean depend
+
+DEPEND = ../dab/dab.o ../stingray/stingray.o
+OBJFILES = examine.o requests.o cmd_hash.o comms.o vars.o jsonapi.o
+
+all: fr_examine
+
+fr_examine: $(OBJFILES) $(DEPEND)
+	$(CC) $(LDFLAGS) $^ -o $@ $(LDLIBS)
+	cp $@ ../vscode_extension
+
+cmd_hash.c: requests.h commands.gperf
+	gperf -L ANSI-C -CGD -N identify -K name -t commands.gperf > $@
+
+clean:
+	rm -f fr_examine $(OBJFILES) cmd_hash.c
+
+depend: $(OBJFILES:.o=.c)
+	makedepend -Y. -I../dab -I.. -I. $^ 2>/dev/null
+# DO NOT DELETE
+
+examine.o: ../dab/dab.h ../generics.h ../eel.h examine.h ../flightrec.h
+examine.o: jsonapi.h requests.h
+requests.o: ../eel.h ../dab/dab.h ../generics.h examine.h ../flightrec.h
+requests.o: jsonapi.h requests.h
+cmd_hash.o: requests.h jsonapi.h
+comms.o: ../eel.h examine.h ../flightrec.h jsonapi.h
+vars.o: ../eel.h ../dab/dab.h ../generics.h ../flightrec.h examine.h
+vars.o: jsonapi.h ../mem.h
+jsonapi.o: jsonapi.h

@@ -1,0 +1,104 @@
+{
+	"name": "flightrec",
+	"displayName": "Flight Recorder",
+	"version": "0.1.0",
+	"publisher": "qrdl",
+	"description": "Flight Recorder's examine.",
+	"author": {
+		"name": "qrdl",
+		"email": "ilya@qrdl.com"
+	},
+	"license": "GNU AGPL 3.0",
+	"engines": {
+		"vscode": "^1.33.0"
+	},
+	"icon": "logo.png",
+	"categories": [ "Debuggers" ],
+	"private" : true,
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/qrdl/flight_rec"
+	},
+	"main": "./",
+	"activationEvents": [
+		"onDebug",
+		"onLanguage:c"
+	],
+
+	"contributes": {
+		"breakpoints": [ { "language": "c" } ],
+		"debuggers": [
+			{
+				"type": "flightrec",
+				"label": "Flight Recorder",
+				"program": "./fr_examine",
+				"configurationAttributes": {
+					"launch": {
+						"required": [ "program", "sourcePath" ],
+						"properties": {
+							"program": {
+								"type": "string",
+								"description": "Required parameter - absolute path to program with recorded run data.",
+								"default": "specify program path here"
+							},
+							"collectedData": {
+								"type": "string",
+								"description": "Optional parameter - absolute path to collected run info file.",
+								"default": "specify collected run info path"
+							},
+							"sourcePath": {
+								"type": "string",
+								"description": "Optional parameter - absolute path to sources.",
+								"default": "${workspaceFolder}"
+							},
+							"stopOnEntry": {
+								"type": "boolean",
+								"description": "Automatically stop after launch.",
+								"default": true
+							}
+						}
+					}
+				},
+				"initialConfigurations": [
+					{
+						"name": "Flight Recorder: Launch",
+						"type": "flightrec",
+						"request": "launch",
+						"program": "specify full program path",
+						"sourcePath": "${workspaceFolder}",
+						"stopOnEntry": true
+					}
+				],
+				"configurationSnippets": [
+					{
+						"label": "Flight Recorder: Launch",
+						"description": "A new configuration for examining collected run data.",
+						"body": {
+							"name": "Flight Recorder: Launch",
+							"type": "flightrec",
+							"request": "launch",
+							"program": "specify full program path",
+							"collectedData": "specify full path to collected run data",
+							"sourcePath": "^\"\\${workspaceFolder}\"",
+							"stopOnEntry": true
+						}
+					},
+					{
+						"label": "Flight Recorder: Attach",
+						"description": "A new configuration for examining collected run data.",
+						"body": {
+							"name": "Flight Recorder: Attach",
+							"type": "flightrec",
+							"request": "launch",
+							"program": "specify full program path",
+							"collectedData": "specify full path to collected run data",
+							"sourcePath": "^\"\\${workspaceFolder}\"",
+							"stopOnEntry": true,
+							"debugServer": "specify the port Examine is listening to"
+						}
+					}
+				]
+			}
+		]
+	}
+}

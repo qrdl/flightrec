@@ -1,0 +1,13 @@
+*.o
+fr_record
+fr_examine
+fr_preload.so
+examine/cmd_hash.c
+*.vsix
+.vsixmanifest
+*.fr
+*.fr-shm
+*.fr-wal
+.vscode/settings.json
+core
+*.log

@@ -1,0 +1,25 @@
+%{
+#include <string.h>    // for strcmp()
+#include "requests.h"
+%}
+struct command {
+    const char  *name;
+    int         code;
+};
+%%
+initialize, cmd_init
+launch, cmd_launch
+threads, cmd_threads
+stackTrace, cmd_stack
+scopes, cmd_scopes
+next, cmd_next
+stepIn, cmd_stepin
+stepOut, cmd_stepout
+stepBack, cmd_stepback
+setExceptionBreakpoints, cmd_exception_br
+configurationDone, cmd_config_done
+setBreakpoints, cmd_breakpoints
+continue, cmd_continue
+reverseContinue, cmd_revcontinue
+variables, cmd_variables
+disconnect, cmd_disconnect
