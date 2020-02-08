@@ -118,7 +118,7 @@ int dbg_srcinfo(char *name) {
         RETCLEAN(FAILURE);
     }
 
-    if (DW_DLV_ERROR == dwarf_init(fd, DW_DLC_READ, NULL, NULL, &dbg, &err)) {
+    if (DW_DLV_ERROR == (ret = dwarf_init(fd, DW_DLC_READ, NULL, NULL, &dbg, &err))) {
         ERR("DWARF init failed - %s", dwarf_errmsg(err));
         RETCLEAN(FAILURE);
     } else if (DW_DLV_NO_ENTRY == ret) {
@@ -444,9 +444,6 @@ int proc_symbols(Dwarf_Debug dbg, Dwarf_Die parent_die, ULONG unit_id, ULONG sco
         }
 
         switch (tag) {
-            case DW_TAG_compile_unit:
-                /* FIXME: Not sure it is possible to get this type as child of unit DIE */
-                break;
             case DW_TAG_variable:   /* FALLTHROUGH */
             case DW_TAG_formal_parameter:
                 if (SUCCESS != proc_var(dbg, die, scope_id, unit_id)) {

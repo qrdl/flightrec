@@ -456,7 +456,7 @@ int get_location(Dwarf_Attribute attrib, REG_TYPE pc, LLONG base_addr, struct us
                     ;   // empty statement is needed because var declaration cannot have a label
                     Dwarf_Small op;
                     Dwarf_Unsigned opd1, opd2, opd3, off;
-                    // FIXME: Instead of 0 index use a loop over op_count
+                    // TODO: Make support for complex location lists with op_count > 1
                     if (DW_DLV_OK != dwarf_get_location_op_value_c(entry, 0, &op, &opd1, &opd2, &opd3, &off, &err)) {
                         ERR("Getting location value failed - %s", dwarf_errmsg(err));
                         RETCLEAN(FAILURE);
@@ -649,10 +649,12 @@ int add_var_entry(JSON_OBJ *container, int parent_type, ULONG parent, char *name
             if (MEM_RELEASED == ret) {
                 sprintf(tmp, "(%s)0x%" PRIx64 " (dangling)", CSTR(tname), addr);
                 JSON_NEW_STRING_FIELD(item, "value", tmp);
+                JSON_NEW_INT64_FIELD(item, "variablesReference", 0);
                 RETCLEAN(SUCCESS);
             } else if (MEM_NOTFOUND == ret) {
                 sprintf(tmp, "(%s)0x%" PRIx64 " (invalid)", CSTR(tname), addr);
                 JSON_NEW_STRING_FIELD(item, "value", tmp);
+                JSON_NEW_INT64_FIELD(item, "variablesReference", 0);
                 RETCLEAN(SUCCESS);
             } else if (SUCCESS != ret) {
                 RETCLEAN(FAILURE);
@@ -689,6 +691,7 @@ int add_var_entry(JSON_OBJ *container, int parent_type, ULONG parent, char *name
                     free(fun_name);
                 }
                 JSON_NEW_STRING_FIELD(item, "value", value);
+                JSON_NEW_INT64_FIELD(item, "variablesReference", 0);
                 free(value);
                 RETCLEAN(SUCCESS);
             }
@@ -716,6 +719,7 @@ int add_var_entry(JSON_OBJ *container, int parent_type, ULONG parent, char *name
                 free(mem);
                 /* TODO sanitise mem to be a valid JSON string */
                 JSON_NEW_STRING_FIELD(item, "value", value);
+                JSON_NEW_INT64_FIELD(item, "variablesReference", 0);
                 free(value);
                 RETCLEAN(SUCCESS);
             }
@@ -805,6 +809,7 @@ int add_var_entry(JSON_OBJ *container, int parent_type, ULONG parent, char *name
             strcpy(new_val, "unsupported");
             break;
     }
+    JSON_NEW_INT64_FIELD(item, "variablesReference", 0);
     JSON_NEW_STRING_FIELD(item, "value", new_val);
 
     free(mem);

@@ -249,7 +249,7 @@ int alter_db(void) {
         return FAILURE;
     }
 
-    // FIXME I don't think it is needed to propagate flags anymore
+    // TODO I don't think it is needed to propagate flags anymore, consider removing it
     /* propagate type definition for derived types from parent type to children */
     if (DAB_OK != DAB_EXEC("UPDATE type SET flags = flags | "
             "(SELECT flags FROM "

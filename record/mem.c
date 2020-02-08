@@ -58,12 +58,12 @@ struct region {
 
 static int process_dirty_page(ULONG start, ULONG step_id);
 static char *mapped_mem(uint64_t address);
-static const char *mem_current(pid_t pid, uint64_t address, uint64_t size);
+static const char *mem_current(uint64_t address, uint64_t size);
 #ifdef __AVX__
 static __m256i mask;
 #endif
 
-static struct region *regions, *cur;
+static struct region *regions, *cur_region;
 static FILE *pagemap;
 static int page_size;
 static pid_t pid;
@@ -151,13 +151,13 @@ int mem_init(pid_t p) {
  **************************************************************************/
 int mem_first_region(uint64_t *start, uint64_t *end) {   
     if (!regions) {
-        cur = NULL;
+        cur_region = NULL;
         return END;
     }
 
     *start = regions->start;
     *end = regions->end;
-    cur = regions;      // FIXME cur is used to store the state for mem_next_region, not thread-safe
+    cur_region = regions;      // TODO cur is used to store the state for mem_next_region, not thread-safe
 
     return SUCCESS;
 }
@@ -176,16 +176,16 @@ int mem_first_region(uint64_t *start, uint64_t *end) {
  *
  **************************************************************************/
 int mem_next_region(uint64_t *start, uint64_t *end) {
-    if (!cur) {
+    if (!cur_region) {
         return FAILURE;
     }
-    if (!cur->next) {
+    if (!cur_region->next) {
         return END;
     }
 
-    cur = cur->next;
-    *start = cur->start;
-    *end = cur->end;
+    cur_region = cur_region->next;
+    *start = cur_region->start;
+    *end = cur_region->end;
 
     return SUCCESS;
 }
@@ -379,8 +379,7 @@ int mem_reset_dirty(void) {
  *
  *  Function:   mem_current
  *
- *  Params:     pid
- *              address - starting address to read from
+ *  Params:     address - starting address to read from
  *              size - how much to read
  *
  *  Return:     pointer to static buffer / NULL on error
@@ -388,7 +387,7 @@ int mem_reset_dirty(void) {
  *  Descr:      Read tracee memory
  *
  **************************************************************************/
-const char *mem_current(pid_t pid, uint64_t address, uint64_t size) {
+const char *mem_current(uint64_t address, uint64_t size) {
     static size_t var_buf_size = 0;
     static char *var_buffer = NULL;
 
@@ -653,7 +652,7 @@ int process_dirty_page(ULONG start, ULONG step_id) {
     /* look through page segments, look for changed one */
     uint64_t page_end = start + page_size;
     for (uint64_t addr = start; addr < page_end; addr += MEM_SEGMENT_SIZE) {
-        const char *mem = mem_current(pid, addr, MEM_SEGMENT_SIZE);
+        const char *mem = mem_current(addr, MEM_SEGMENT_SIZE);
         if (!mem) {
             return FAILURE;
         }
