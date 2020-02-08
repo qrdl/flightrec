@@ -50,7 +50,7 @@ Also following libraries are required (with Ubuntu package names):
 
 ### VSCode extension
 To package VSCode extension you need to have [Node.js](https://nodejs.org/) installed, with [vsce](https://github.com/microsoft/vscode-vsce).
-To install `vsce` run `npm install -g vsce`.
+To install `vsce` run `npm install vsce`.
 
 ## Building
 To build Flightrec run `make` in Flightrec's root directory. Binaries `fr_record`, `fr_preload.so` and `fr_examine` will be copied into Flightrec's root directory.

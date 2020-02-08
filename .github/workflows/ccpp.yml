@@ -13,6 +13,6 @@ jobs:
       run: |
         sudo apt-get update
         sudo apt-get install -y libdwarf-dev libelf-dev libsqlite3-dev libjson-c-dev gperf nodejs npm
-        npm install -g vsce
+        npm install vsce
     - name: make
       run: make
