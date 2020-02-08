@@ -42,11 +42,11 @@ Although Flightrec is multi-threaded application, it doesn't support multi-threa
 
 ### Record and Examine
 To build Flightrec make sure you have [GNU gperf](https://www.gnu.org/software/gperf/), which is usually available as _gperf_ package.
-Also following libraries are required:
-* libelf (`libelf-devel`)
-* libdwarf (`libdwarf-devel`)
-* sqlite3 (`sqlite3-devel`)
-* json-c (`libjson-c-devel`)
+Also following libraries are required (with Ubuntu package names):
+* libelf (`libelf-dev`)
+* libdwarf (`libdwarf-dev`)
+* sqlite3 (`libsqlite3-dev`)
+* json-c (`libjson-c-dev`)
 
 ### VSCode extension
 To package VSCode extension you need to have [Node.js](https://nodejs.org/) installed, with [vsce](https://github.com/microsoft/vscode-vsce).

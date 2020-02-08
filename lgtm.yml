@@ -1,0 +1,19 @@
+queries:
+  - exclude: cpp/use-of-goto            
+extraction:
+  cpp:
+    prepare:    # Customizable step used by all languages.
+      packages:
+        - libsqlite3-dev
+        - libelf-dev
+        - libdwarf-dev
+        - libjson-c-dev
+    after_prepare:    # Customizable step used by all languages.
+      - export GNU_MAKE=make
+      - export GIT=true
+    index:    # Customizable step used by all languages.
+      build_command:
+        - $GNU_MAKE -C dab
+        - $GNU_MAKE -C stingray
+        - $GNU_MAKE -C record
+        - $GNU_MAKE -C examine

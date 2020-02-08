@@ -11,3 +11,5 @@ examine/cmd_hash.c
 .vscode/settings.json
 core
 *.log
+test/test
+test/test.dump
