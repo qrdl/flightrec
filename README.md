@@ -53,7 +53,7 @@ To package VSCode extension you need to have [Node.js](https://nodejs.org/) inst
 To install `vsce` run `npm install vsce`.
 
 ## Building
-To build Flightrec run `make` in Flightrec's root directory. Binaries `fr_record`, `fr_preload.so` and `fr_examine` will be copied into Flightrec's root directory.
+To build Flightrec run `make` in Flightrec's root directory. Binaries `fr_record`, `fr_preload.so` will be copied into Flightrec's root directory. VSCode debugging extension will be created in `vscode_extension` directory.
 
 ## Installing
 Run `make install` in `vscode_extension` directory or manually install Flightrec extension in VS Code by selecting `Install from VSIX...` menu option in `Extensions` tab.
