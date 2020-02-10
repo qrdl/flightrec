@@ -46,7 +46,7 @@ Also following libraries are required (with Ubuntu package names):
 * libelf (`libelf-dev`)
 * libdwarf (`libdwarf-dev`)
 * sqlite3 (`libsqlite3-dev`)
-* json-c (`libjson-c-dev`)
+* json-c (`libjson-c-dev`) version 1.13 or above
 
 ### VSCode extension
 To package VSCode extension you need to have [Node.js](https://nodejs.org/) installed, with [vsce](https://github.com/microsoft/vscode-vsce).
