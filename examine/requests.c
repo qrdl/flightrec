@@ -971,7 +971,7 @@ cleanup:
 int process_revcontinue(const JSON_OBJ *request, int fd) {
     JSON_OBJ *rsp = JSON_NEW_OBJ();
     int ret = SUCCESS;
-    const char *error;
+    const char *error = NULL;
     const char *response;
 
     if (!revcontinue_cursor) {
@@ -991,7 +991,7 @@ int process_revcontinue(const JSON_OBJ *request, int fd) {
             "WHERE "
                 "s.id < ? "
             "ORDER BY "
-                "s.id",
+                "s.id DESC",
             cur_step
         )) {
             error = "Cannot prepare statement";

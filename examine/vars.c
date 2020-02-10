@@ -642,6 +642,7 @@ int add_var_entry(JSON_OBJ *container, int parent_type, ULONG parent, char *name
             free(mem);
             if (0 == addr) {
                 JSON_NEW_STRING_FIELD(item, "value", "NULL");
+                JSON_NEW_INT64_FIELD(item, "variablesReference", 0);
                 RETCLEAN(SUCCESS);
             }
             char tmp[32];
@@ -740,7 +741,11 @@ int add_var_entry(JSON_OBJ *container, int parent_type, ULONG parent, char *name
             }
             switch (size) {
                 case 1:
-                    sprintf(new_val, "%" PRId8, *(int8_t *)mem);
+                    if (isprint(*(int8_t *)mem)) {
+                        sprintf(new_val, "%" PRId8 " '%c'", *(int8_t *)mem, *(int8_t *)mem);
+                    } else {
+                        sprintf(new_val, "%" PRId8, *(int8_t *)mem);
+                    }
                     break;
                 case 2:
                     sprintf(new_val, "%" PRId16, *(int16_t *)mem);
@@ -764,7 +769,11 @@ int add_var_entry(JSON_OBJ *container, int parent_type, ULONG parent, char *name
             }
             switch (size) {
                 case 1:
-                    sprintf(new_val, "%" PRIu8, *(uint8_t *)mem);
+                    if (isprint(*(uint8_t *)mem)) {
+                        sprintf(new_val, "%" PRIu8 " '%c'", *(uint8_t *)mem, *(uint8_t *)mem);
+                    } else {
+                        sprintf(new_val, "%" PRIu8, *(uint8_t *)mem);
+                    }
                     break;
                 case 2:
                     sprintf(new_val, "%" PRIu16, *(uint16_t *)mem);
