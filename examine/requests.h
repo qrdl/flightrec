@@ -47,7 +47,8 @@ enum commands {
     cmd_continue,
     cmd_revcontinue,
     cmd_variables,
-    cmd_disconnect
+    cmd_disconnect,
+    cmd_evaluate
 };
 
 int process_init(const JSON_OBJ *request, int fd);
@@ -64,6 +65,7 @@ int process_breakpoints(const JSON_OBJ *request, int fd);
 int process_continue(const JSON_OBJ *request, int fd);
 int process_revcontinue(const JSON_OBJ *request, int fd);
 int process_variables(const JSON_OBJ *request, int fd);
+int process_evaluate(const JSON_OBJ *request, int fd);
 int just_ack(const JSON_OBJ *request, int fd);
 
 #endif

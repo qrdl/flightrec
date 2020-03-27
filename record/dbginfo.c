@@ -784,6 +784,8 @@ int proc_custom_type(Dwarf_Debug dbg, Dwarf_Die die, Dwarf_Half tag, ULONG unit_
     if (!ATTR_PRESENT(0)) {
         if (DW_TAG_pointer_type == tag) {
             name = "void";
+        } else if (DW_TAG_subroutine_type == tag) {
+            name = "";
         } else {
             /* no base type specified - either forward type declaration or opaque type,
                no variable of this type can exist, only the pointer */

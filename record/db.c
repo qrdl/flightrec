@@ -129,6 +129,7 @@ int create_db(void) {
                                 "dim        INTEGER DEFAULT 0, "    // number of sub-items
                                 "parent     INTEGER, "              // referenced type - type.offset
                                 "flags      INTEGER NOT NULL, "
+                                "indirect   INTEGER DEFAULT 0, "    // number of indirections
                                 "PRIMARY KEY (unit_id, offset)"
                             ")")) {
         return FAILURE;
@@ -249,7 +250,45 @@ int alter_db(void) {
         return FAILURE;
     }
 
-    // TODO I don't think it is needed to propagate flags anymore, consider removing it
+    /* create view for ancestor-descendant relations between types */
+    /* for struct, union and array parent type is type of the member/item, for func - return type,
+       so parent type not really an ancestor type in such cases */
+    if (DAB_OK != DAB_EXEC("CREATE VIEW type_relation AS "
+            "WITH RECURSIVE "
+                "relation(ancestor, descendant, depth) AS ( "
+                "SELECT offset, offset, 0 FROM type "
+                "UNION "
+                "SELECT parent, descendant, depth+1 FROM type JOIN relation ON offset=relation.ancestor "
+            ") "
+            "SELECT ancestor, descendant, depth FROM relation")) {
+        return FAILURE;
+    }
+
+    /* set indirections for pointers */
+    if (DAB_OK != DAB_EXEC("UPDATE type SET indirect = 1 "
+            "WHERE "
+                "(flags & " STR(TKIND_TYPE) ") = " STR(TKIND_POINTER)
+                )) {
+        return FAILURE;
+    }
+
+    /* set indirections for types, derived from pointers */
+    if (DAB_OK != DAB_EXEC("UPDATE type SET indirect = indirect+1 "
+            "WHERE "
+                "rowid IN ("
+                    "SELECT "
+                        "d.rowid "
+                    "FROM "
+                        "type a "
+                        "JOIN type_relation r ON r.ancestor = a.offset "
+                        "JOIN type d ON d.offset = r.descendant "
+                    "WHERE "
+                        "(a.flags & " STR(TKIND_TYPE) ") = " STR(TKIND_POINTER) " AND "
+                        "a.rowid != d.rowid"
+                ")")) {
+        return FAILURE;
+    }
+
     /* propagate type definition for derived types from parent type to children */
     if (DAB_OK != DAB_EXEC("UPDATE type SET flags = flags | "
             "(SELECT flags FROM "

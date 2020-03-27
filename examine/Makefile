@@ -26,20 +26,23 @@
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #
 ##########################################################################
-CFLAGS := -Wall -Wextra -Wno-format-security -g3 -I../dab -I../stingray -I..
-LDLIBS := -lsqlite3 -ldwarf -lelf -ljson-c
+CFLAGS := -Wall -Wextra -Wno-format-security -g3 -I../dab -I../stingray -I.. -I.
+LDLIBS := -lsqlite3 -ldwarf -lelf -ljson-c -lexpr -Lexpressions
 LDFLAGS := -pthread
 
-.PHONY: all clean depend
+.PHONY: all clean depend expressions/libexpr.a
 
 DEPEND = ../dab/dab.o ../stingray/stingray.o
 OBJFILES = examine.o requests.o cmd_hash.o comms.o vars.o jsonapi.o
 
 all: fr_examine
 
-fr_examine: $(OBJFILES) $(DEPEND)
+fr_examine: $(OBJFILES) $(DEPEND) expressions/libexpr.a
 	$(CC) $(LDFLAGS) $^ -o $@ $(LDLIBS)
 	cp $@ ../vscode_extension
+
+expressions/libexpr.a:
+	$(MAKE) -C expressions
 
 cmd_hash.c: requests.h commands.gperf
 	gperf -L ANSI-C -CGD -N identify -K name -t commands.gperf > $@

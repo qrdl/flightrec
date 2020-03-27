@@ -49,6 +49,7 @@
 #include "channel.h"
 #include "workers.h"
 
+/* TODO: consider using array rather than linked list for cache locality */
 struct region {
     uint64_t        start;
     uint64_t        end;
@@ -283,6 +284,7 @@ int mem_process_region(ULONG start, ULONG end, ULONG step_id, int force) {
             }
             cur += PAGE_DESCR_SIZE * 4;
         }
+        cur += DIRTY_OFFSET;    // shift to required bit
 
         switch (page_count - page_num) {
             case 3:

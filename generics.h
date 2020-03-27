@@ -35,6 +35,8 @@
 #define ULONG uint64_t
 #endif
 
+#include "stingray.h"
+
 /*
  * Macros for processing variadic calls, with params of different types *
  */

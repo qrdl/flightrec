@@ -2,9 +2,9 @@
 #include <stdlib.h>
 #include <string.h>
 
-double y;
+double y = 5;
 
-char *qwe = "0123456789abcdefghijklmopqrstuvwxyz";
+char qwe[] = "0123456789abcdefghijklmopqrstuvwxyz";
 
 struct bar {
     int     a;
@@ -35,6 +35,7 @@ int main(void) {
 
     for (i = 0; i < 5; i++) {
         y = i + 0.01;
+        qwe[i] = ' ';
 //        cur = bar + i;
         cur[i].a = i;
         cur[i].b = y;

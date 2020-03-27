@@ -205,6 +205,9 @@ int process_request(const JSON_OBJ *request, int fd) {
             case cmd_variables:
                 process_variables(request, fd);
                 break;
+            case cmd_evaluate:
+                process_evaluate(request, fd);
+                break;
             case cmd_exception_br:  /* FALLTHROUGH */
             case cmd_config_done:
                 just_ack(request, fd);
