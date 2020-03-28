@@ -35,6 +35,14 @@
 #define SUCCESS     0
 #define FAILURE     1
 
+/* parent types for references */
+#define PTYPE_SCOPE 1
+#define PTYPE_REF   2
+#define PTYPE_EXPR  3
+
+#define MEM_NOTFOUND    2
+#define MEM_RELEASED    3
+
 int init_comms(char *port);
 int read_message(int fd, char **message);
 int send_message(int fd, const char *message);
@@ -43,6 +51,12 @@ int open_dbginfo(const char *filename);
 int add_var(ULONG scope, JSON_OBJ *container, ULONG var_id, ULONG step);
 int add_var_items(JSON_OBJ *container, ULONG ref_id, unsigned int start, unsigned int count);
 int add_var_fields(JSON_OBJ *container, ULONG ref_id);
+
+int get_var_address(uint64_t var_id, uint64_t step, char **name, uint64_t *address, uint64_t *type_offset);
+char *get_var_value(ULONG addr, size_t size, uint64_t step);
+int get_var_ref(int parent_type, ULONG parent, const char *child, ULONG address, ULONG type, int indirect, ULONG *ref);
+struct sr *type_name(ULONG type_offset, int indirect);
+int get_pointer_size(ULONG address, ULONG *size);
 
 void release_cursors(void);
 

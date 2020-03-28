@@ -43,12 +43,6 @@
 #include "mem.h"
 #include "jsonapi.h"
 
-#define PTYPE_SCOPE 1
-#define PTYPE_REF   2
-
-#define MEM_NOTFOUND    2
-#define MEM_RELEASED    3
-
 static Dwarf_Debug dbg;
 
 void *var_cursor;
@@ -85,13 +79,11 @@ int dwarf_registers[] = {                   // support only first 16 registers f
     offsetof(struct user_regs_struct, r15),
 };
 
-static int get_location(Dwarf_Attribute attrib, REG_TYPE pc, LLONG base_addr, struct user_regs_struct *regs, LLONG *address);
-static char *get_value(ULONG addr, size_t size);
-static int add_var_entry(JSON_OBJ *container, int parent_type, ULONG parent, char *name, ULONG addr, ULONG type);
-static int get_var_ref(int parent_type, ULONG parent, const char *child, ULONG address, ULONG type, ULONG *ref);
-static int get_pointer_size(ULONG address, ULONG *size);
+static int get_location(Dwarf_Attribute attrib, REG_TYPE pc, LLONG base_addr, struct user_regs_struct *regs,
+                        LLONG *address);
+static int add_var_entry(JSON_OBJ *container, int parent_type, ULONG parent, char *name, ULONG addr,
+                        ULONG type, int indirect);
 static int func_name(ULONG address, char **name);
-static struct sr *type_name(ULONG type_offset);
 
 
 /**************************************************************************
@@ -144,8 +136,41 @@ int open_dbginfo(const char *filename) {
  *
  **************************************************************************/
 int add_var(ULONG scope, JSON_OBJ *container, ULONG var_id, ULONG step) {
+    char *name;
+    uint64_t addr, type_offset;
+
+    if (FAILURE == get_var_address(var_id, step, &name, &addr, &type_offset)) {
+        return FAILURE;
+    }
+
+    // add entry to JSON
+    if (FAILURE == add_var_entry(container, PTYPE_SCOPE, scope, name, addr, type_offset, 0)) {
+        return FAILURE;
+    }
+
+    return SUCCESS;
+}
+
+
+/**************************************************************************
+ *
+ *  Function:   get_var_address
+ *
+ *  Params:     var_id
+ *              step - step to get var address for
+ *              name - where to store var name
+ *              addr - where to store var address
+ *              type_offset - where to store type offset
+ *
+ *  Return:     SUCCESS / FAILURE
+ *
+ *  Descr:      Get variable address for specified step, and other details 
+ *
+ **************************************************************************/
+int get_var_address(uint64_t var_id, uint64_t step, char **name, uint64_t *address, uint64_t *type_offset) {
     Dwarf_Error err = NULL;
     Dwarf_Die die = NULL;
+    int ret= SUCCESS;
 
     /* find var details by ID */
     if (!var_cursor) {
@@ -170,10 +195,9 @@ int add_var(ULONG scope, JSON_OBJ *container, ULONG var_id, ULONG step) {
     } else if (DAB_OK != DAB_CURSOR_RESET(var_cursor) || DAB_OK != DAB_CURSOR_BIND(var_cursor, var_id)) {
         return FAILURE;
     }
-    Dwarf_Off var_offset, func_offset, type_offset;
-    char *name;
+    Dwarf_Off var_offset, func_offset;
     LLONG base;
-    if (DAB_OK != DAB_CURSOR_FETCH(var_cursor, &name, &var_offset, &func_offset, &base, &type_offset)) {
+    if (DAB_OK != DAB_CURSOR_FETCH(var_cursor, name, &var_offset, &func_offset, &base, type_offset)) {
         ERR("Cannot find details for variable %" PRIu64, var_id);
         return FAILURE;
     }
@@ -204,11 +228,11 @@ int add_var(ULONG scope, JSON_OBJ *container, ULONG var_id, ULONG step) {
     memcpy(&regs, CSTR(registers), sizeof(regs));
 
     /* find variable location information */
-    int ret = dwarf_offdie_b(dbg, var_offset, 1, &die, &err);
-    if (DW_DLV_ERROR == ret) {
+    int dwarf_ret = dwarf_offdie_b(dbg, var_offset, 1, &die, &err);
+    if (DW_DLV_ERROR == dwarf_ret) {
         ERR("Cannot find debug entry for offset x%llx - %s", var_offset, dwarf_errmsg(err));
         RETCLEAN(FAILURE);
-    } else if (DW_DLV_NO_ENTRY == ret) {
+    } else if (DW_DLV_NO_ENTRY == dwarf_ret) {
         ERR("No DWARF entry found for offset x%llx", var_offset);
         RETCLEAN(FAILURE);
     }
@@ -217,18 +241,18 @@ int add_var(ULONG scope, JSON_OBJ *container, ULONG var_id, ULONG step) {
         ERR("Getting DW_AT_location for offset x%llx", var_offset);
         RETCLEAN(FAILURE);
     }
-    LLONG addr;
+    LLONG addr;   // signed because can be negative for relative address
     if (SUCCESS != get_location(attrib, regs.rip, base, &regs, &addr)) {
-        RETCLEAN(SUCCESS);          // cannot get variable location - just ignore
+        RETCLEAN(FAILURE);          // cannot get variable location
     }
     /* negative address as offset from frame base - find frame base from function DIE */
     if (addr < 0) {
         dwarf_dealloc(dbg, die, DW_DLA_DIE);
-        int ret = dwarf_offdie_b(dbg, func_offset, 1, &die, &err);
-        if (DW_DLV_ERROR == ret) {
+        dwarf_ret = dwarf_offdie_b(dbg, func_offset, 1, &die, &err);
+        if (DW_DLV_ERROR == dwarf_ret) {
             ERR("Cannot find debug entry for offset x%llx - %s", var_offset, dwarf_errmsg(err));
             RETCLEAN(FAILURE);
-        } else if (DW_DLV_NO_ENTRY == ret) {
+        } else if (DW_DLV_NO_ENTRY == dwarf_ret) {
             ERR("No DWARF entry found for offset x%llx", var_offset);
             RETCLEAN(FAILURE);
         }
@@ -243,9 +267,7 @@ int add_var(ULONG scope, JSON_OBJ *container, ULONG var_id, ULONG step) {
         }
         addr += frame_base;
     }
-
-    // add entry to JSON
-    ret = add_var_entry(container, PTYPE_SCOPE, scope, name, addr, type_offset);
+    *address = (uint64_t)addr;
 
 cleanup:
     if (err) {
@@ -277,13 +299,14 @@ int add_var_items(JSON_OBJ *container, ULONG ref_id, unsigned int start, unsigne
     if (!array_cursor) {
         if (DAB_OK != DAB_CURSOR_PREPARE(&array_cursor, "SELECT "
                 "ref.address, "
-                "base.offset, "
-                "base.size, "
-                "type.dim "
+                "IFNULL(base.offset, type.offset), "
+                "IFNULL(base.size, type.size), "
+                "type.dim, "
+                "ref.indirect "
             "FROM "
                 "local.ref ref "
                 "JOIN type ON type.offset = ref.type "
-                "JOIN type base ON base.offset = type.parent "
+                "LEFT JOIN type base ON base.offset = type.parent "
             "WHERE "
                 "ref.id = ?"
         )) {
@@ -296,10 +319,11 @@ int add_var_items(JSON_OBJ *container, ULONG ref_id, unsigned int start, unsigne
         return FAILURE;
     }
     ULONG address, item_size, dim, base_type;
-    if (DAB_OK != DAB_CURSOR_FETCH(array_cursor, &address, &base_type, &item_size, &dim)) {
+    int indirect;
+    if (DAB_OK != DAB_CURSOR_FETCH(array_cursor, &address, &base_type, &item_size, &dim, &indirect)) {
         return FAILURE;
     }
-    if (!dim) {
+    if (!dim || indirect) {
         /* var is pointer - try to get size */
         ULONG pointer_size;
         if (SUCCESS != get_pointer_size(address, &pointer_size)) {
@@ -314,7 +338,8 @@ int add_var_items(JSON_OBJ *container, ULONG ref_id, unsigned int start, unsigne
     char name[32];
     for (unsigned int i = start; i < count && i < dim; i++) {
         sprintf(name, "[%d]", i);
-        if (FAILURE == add_var_entry(container, 1, ref_id, name, address + i * item_size, base_type)) {
+        if (FAILURE == add_var_entry(container, 1, ref_id, name, address + i * item_size, base_type,
+                                        indirect ? indirect-1 : 0)) {
             return FAILURE;
         }
     }
@@ -383,7 +408,7 @@ int add_var_fields(JSON_OBJ *container, ULONG ref_id) {
     char *name;
     ULONG start_offset;
     while (DAB_OK == (ret = DAB_CURSOR_FETCH(member_cursor, &name, &start_offset, &type))) {
-        if (FAILURE == add_var_entry(container, 1, ref_id, name, address + start_offset, type)) {
+        if (FAILURE == add_var_entry(container, 1, ref_id, name, address + start_offset, type, 0)) {
             return FAILURE;
         }
     }
@@ -500,17 +525,18 @@ cleanup:
 
 /**************************************************************************
  *
- *  Function:   get_value
+ *  Function:   get_var_value
  *
  *  Params:     addr - address to get value from
  *              size - how many bytes to read
+ *              step - program step to get value for
  *
  *  Return:     allocated buffer (need to be freed) / NULL on error
  *
  *  Descr:      Get memory content for the specified address
  *
  **************************************************************************/
-char *get_value(ULONG addr, size_t size) {
+char *get_var_value(ULONG addr, size_t size, uint64_t step) {
     /* find memory content */
     if (!mem_cursor) {
         if (DAB_OK != DAB_CURSOR_OPEN(&mem_cursor,
@@ -527,14 +553,14 @@ char *get_value(ULONG addr, size_t size) {
                 "address "
             "HAVING "
                 "step_id = MAX(step_id)",
-                cur_step,
+                step,
                 addr + size,
                 addr - MEM_SEGMENT_SIZE
         )) {
             return NULL;
         }
     } else if ( DAB_OK != DAB_CURSOR_RESET(mem_cursor) ||
-                DAB_OK != DAB_CURSOR_BIND(mem_cursor, cur_step, addr+size, addr-MEM_SEGMENT_SIZE)) {
+                DAB_OK != DAB_CURSOR_BIND(mem_cursor, step, addr+size, addr-MEM_SEGMENT_SIZE)) {
         return NULL;
     }
 
@@ -582,7 +608,8 @@ char *get_value(ULONG addr, size_t size) {
  *  Descr:      Get memory content for the specified address
  *
  **************************************************************************/
-int add_var_entry(JSON_OBJ *container, int parent_type, ULONG parent, char *name, ULONG addr, ULONG type) {
+int add_var_entry(JSON_OBJ *container, int parent_type, ULONG parent, char *name, ULONG addr,
+                    ULONG type, int indirect) {
     char *mem = NULL;
     int ret = SUCCESS;
 
@@ -619,14 +646,19 @@ int add_var_entry(JSON_OBJ *container, int parent_type, ULONG parent, char *name
     ULONG pointer_size = 0;
     ULONG dummy;
     struct sr *tname;
-    tname = type_name(type);
+    tname = type_name(type, indirect);
     int value_added = 0;
 
+    // hack to force pointer processing
+    int org_flags = flags;
+    if (indirect) {
+        flags = TKIND_POINTER;
+    }
     switch (flags & TKIND_TYPE) {
         case TKIND_STRUCT:
             /* process compound variable by adding the reference to it so client can query its internal structure
                 in separate request */
-            if (SUCCESS != get_var_ref(parent_type, parent, name, addr, type, &ref)) {
+            if (SUCCESS != get_var_ref(parent_type, parent, name, addr, type, 0, &ref)) {
                 RETCLEAN(FAILURE);
             }
             JSON_NEW_INT64_FIELD(item, "variablesReference", ref);
@@ -634,7 +666,8 @@ int add_var_entry(JSON_OBJ *container, int parent_type, ULONG parent, char *name
             JSON_NEW_STRING_FIELD(item, "value", CSTR(tname));
             RETCLEAN(SUCCESS);
         case TKIND_POINTER:
-            mem = get_value(addr, size);
+            flags = org_flags;
+            mem = get_var_value(addr, size, cur_step);
             if (!mem) {
                 RETCLEAN(FAILURE);
             }
@@ -668,11 +701,13 @@ int add_var_entry(JSON_OBJ *container, int parent_type, ULONG parent, char *name
             }
             /* FALLTHROUGH - process pointer as array */
         case TKIND_ARRAY:
-            /* check parent base type */
-            if (    DAB_OK != DAB_CURSOR_RESET(type_cursor) ||
-                    DAB_OK != DAB_CURSOR_BIND(type_cursor, base_type) ||
-                    DAB_OK != DAB_CURSOR_FETCH(type_cursor, &size, &dummy, &flags, &base_type)) {
-                RETCLEAN(FAILURE);
+            if (!indirect) {
+                /* check parent base type */
+                if (    DAB_OK != DAB_CURSOR_RESET(type_cursor) ||
+                        DAB_OK != DAB_CURSOR_BIND(type_cursor, base_type) ||
+                        DAB_OK != DAB_CURSOR_FETCH(type_cursor, &size, &dummy, &flags, &base_type)) {
+                    RETCLEAN(FAILURE);
+                }
             }
             if (pointer_size) {
                 dim = pointer_size / size;      // number of base type elements in allocated pointer
@@ -704,7 +739,7 @@ int add_var_entry(JSON_OBJ *container, int parent_type, ULONG parent, char *name
                     dim = 32;
                 }
                 /* treat char pointer/array as string */
-                mem = get_value(addr, dim);
+                mem = get_var_value(addr, dim, cur_step);
                 if (!mem) {
                     RETCLEAN(FAILURE);
                 }
@@ -725,7 +760,7 @@ int add_var_entry(JSON_OBJ *container, int parent_type, ULONG parent, char *name
                 RETCLEAN(SUCCESS);
             }
 
-            if (SUCCESS != get_var_ref(parent_type, parent, name, addr, type, &ref)) {
+            if (SUCCESS != get_var_ref(parent_type, parent, name, addr, type, indirect, &ref)) {
                 RETCLEAN(FAILURE);
             }
             if (!value_added) {      // add value with type, if not added by pointer code above
@@ -735,7 +770,7 @@ int add_var_entry(JSON_OBJ *container, int parent_type, ULONG parent, char *name
             JSON_NEW_INT64_FIELD(item, "indexedVariables", dim);
             RETCLEAN(SUCCESS);
         case TKIND_SIGNED:
-            mem = get_value(addr, size);
+            mem = get_var_value(addr, size, cur_step);
             if (!mem) {
                 RETCLEAN(FAILURE);
             }
@@ -763,7 +798,7 @@ int add_var_entry(JSON_OBJ *container, int parent_type, ULONG parent, char *name
             }
             break;
         case TKIND_UNSIGNED:
-            mem = get_value(addr, size);
+            mem = get_var_value(addr, size, cur_step);
             if (!mem) {
                 RETCLEAN(FAILURE);
             }
@@ -791,7 +826,7 @@ int add_var_entry(JSON_OBJ *container, int parent_type, ULONG parent, char *name
             }
             break;
         case TKIND_FLOAT:
-            mem = get_value(addr, size);
+            mem = get_var_value(addr, size, cur_step);
             if (!mem) {
                 RETCLEAN(FAILURE);
             }
@@ -839,6 +874,7 @@ cleanup:
  *              child - name of child (var / var element)
  *              address
  *              type - variable type
+ *              indirect - number of indirections for the type
  *              ref - where to write the reference
  *
  *  Return:     SUCCESS / FAILURE
@@ -846,7 +882,7 @@ cleanup:
  *  Descr:      Add variable to reference table, return the reference
  *
  **************************************************************************/
-int get_var_ref(int parent_type, ULONG parent, const char *child, ULONG address, ULONG type, ULONG *ref) {
+int get_var_ref(int parent_type, ULONG parent, const char *child, ULONG address, ULONG type, int indirect, ULONG *ref) {
     if (!ref_cursor) {
         /* create in-memory table for var references */
         if (DAB_OK != DAB_EXEC("CREATE TABLE local.ref ("
@@ -855,7 +891,8 @@ int get_var_ref(int parent_type, ULONG parent, const char *child, ULONG address,
                 "parent         INTEGER, "
                 "child          VARCHAR, "
                 "address        INTEGER, "
-                "type           INTEGER,"
+                "type           INTEGER, "
+                "indirect       INTEGER DEFAULT 0, "
                 "UNIQUE (parent_type, parent, child)"
             ")"
         )) {
@@ -863,13 +900,14 @@ int get_var_ref(int parent_type, ULONG parent, const char *child, ULONG address,
         }
         /* unlike 'INSERT OR REPLACE', 'ON CONFLICT DO UPDATE' doesn't delete the existing record so 'id' doesn't change */
         if (DAB_OK != DAB_CURSOR_PREPARE(&ref_upsert, "INSERT INTO local.ref "
-                "(parent_type, parent, child, address, type) "
+                "(parent_type, parent, child, address, type, indirect) "
                 "VALUES "
-                "(?,           ?,      ?,     ?,       ?) "
+                "(?,           ?,      ?,     ?,       ?,    ?) "
                 "ON CONFLICT (parent_type, parent, child) "
                     "DO UPDATE SET "
                         "address = excluded.address, "
-                        "type = excluded.type"
+                        "type = excluded.type, "
+                        "indirect = excluded.indirect"
         )) {
             return FAILURE;
         }
@@ -887,7 +925,7 @@ int get_var_ref(int parent_type, ULONG parent, const char *child, ULONG address,
         DAB_CURSOR_RESET(ref_cursor);
     }
 
-    if (    DAB_OK != DAB_CURSOR_BIND(ref_upsert, parent_type, parent, child, address, type) ||
+    if (    DAB_OK != DAB_CURSOR_BIND(ref_upsert, parent_type, parent, child, address, type, indirect) ||
             DAB_NO_DATA != DAB_CURSOR_FETCH(ref_upsert) ||
             DAB_OK != DAB_CURSOR_BIND(ref_cursor, parent_type, parent, child) ||
             DAB_OK != DAB_CURSOR_FETCH(ref_cursor, ref)) {
@@ -994,13 +1032,14 @@ int func_name(ULONG address, char **name) {
  *
  *  Params:     type_offset
  *              type_name - where to store function name
+ *              indirect - number of indirections to add
  *
  *  Return:     SUCCESS / FAILURE
  *
  *  Descr:      Lookup type name by offset
  *
  **************************************************************************/
-struct sr *type_name(ULONG type_offset) {
+struct sr *type_name(ULONG type_offset, int indirect) {
     if (!type_name_cursor) {
         if (DAB_OK != DAB_CURSOR_OPEN(&type_name_cursor,
             "WITH RECURSIVE parent_of(name, flags, offset, parent, level) AS ("
@@ -1067,7 +1106,9 @@ struct sr *type_name(ULONG type_offset) {
         }
         free(name);
     }
+    for (; indirect > 0; indirect--) {
+        STRCAT(res, "*");
+    }
 
     return res;
 }
-

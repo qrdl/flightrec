@@ -23,3 +23,4 @@ continue, cmd_continue
 reverseContinue, cmd_revcontinue
 variables, cmd_variables
 disconnect, cmd_disconnect
+evaluate, cmd_evaluate

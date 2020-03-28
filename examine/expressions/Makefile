@@ -4,7 +4,7 @@
 #
 #  Project:    	Flight recorder (https://github.com/qrdl/flightrec)
 #
-#  Descr:      	Stingray makefile
+#  Descr:      	Expression parser/evaluator makefile
 #
 #  Notes:
 #
@@ -26,20 +26,30 @@
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #
 ##########################################################################
-CFLAGS := -Wall -Wextra -g3 -I.. -I.
+CFLAGS := -Wall -Wextra -g3 -I../../dab -I../../stingray -I../.. -I..
 
-.PHONY : all clean stingray
+.PHONY: all clean
 
-all: stingray
+all: libexpr.a
 
-stingray: stingray.o
+libexpr.a: y.tab.o lex.yy.o expression.o
+	ar -rcs $@ $^
 
-stingray.o: stingray.c stingray.h sr_internal.h Makefile
-	$(CC) $(CFLAGS) -c -o $@ stingray.c
+test: test.c expression.h libexpr.a
+	$(CC) -o $@ test.c -lfl -lexpr -L.
 
-test: test.c stingray.o
-	$(CC) $(CFLAGS) -o $@ $^
+expression.o: expression.c expression.h
+	$(CC) -c $(CFLAGS) -o $@ expression.c
+
+lex.yy.o: expr.l y.tab.h expression.h
+	lex expr.l
+	$(CC) -c -o $@ lex.yy.c -I../.. -I..
+
+y.tab.o: expr.y expression.h
+	yacc -d expr.y
+#	yacc -d -t expr.y
+	$(CC) -c -o $@ y.tab.c -I../.. -I..
 
 clean:
-	rm -f test stingray.o
+	rm -f lex.yy.c y.tab.c y.tab.h test expression.o lex.yy.o y.tab.o libexpr.a
 

@@ -1,10 +1,10 @@
 /**************************************************************************
  *
- *  File:       channel.h
+ *  File:       expr.h
  *
  *  Project:    Flight recorder (https://github.com/qrdl/flightrec)
  *
- *  Descr:      Inter-thread channels
+ *  Descr:      Expression parsing and evaluation
  *
  *  Notes:
  *
@@ -26,22 +26,25 @@
  *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *
  **************************************************************************/
-#ifndef _CHANNEL_H
-#define _CHANNEL_H
+#ifndef _EXPR_H
+#define _EXPR_H
 
 #include <stddef.h>
+#include <stdint.h>
 
-#define CHANNEL_OK      1
-#define CHANNEL_FAIL    2
-#define CHANNEL_MISREAD 3
-#define CHANNEL_END     4
+#include "jsonapi.h"
 
-struct channel;
+struct ast_node;    // real definition inside expr_internal.h
 
-struct channel *ch_create(void);
-int ch_write(struct channel *ch, char *buf, size_t bufsize);
-int ch_read(struct channel *ch, char **buf, size_t *bufsize);
-int ch_finish(struct channel *ch);
-void ch_destroy(struct channel *ch);
+struct ast_node *new_ast_node(int type);
+void free_ast_node(struct ast_node *node);
+
+struct ast_node *expr_parse(const char *expr, uint64_t scope_id, char **error);
+int get_eval_result(JSON_OBJ *container, uint64_t id, struct ast_node *ast, uint64_t step, char **error);
+
+int query_expr_cache(const char *expr_text, uint64_t *id, struct ast_node **ast);
+int update_expr_cache(uint64_t id, struct ast_node *ast);
+
+void close_expr_cursors(void);
 
 #endif

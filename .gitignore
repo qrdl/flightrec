@@ -13,3 +13,7 @@ core
 *.log
 test/test
 test/test.dump
+y.tab.c
+y.tab.h
+lex.yy.c
+libexpr.a

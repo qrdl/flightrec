@@ -50,9 +50,11 @@
 #define SCOPE_NA        10
 
 /* type kind - first 8 bits set basic type, rest are bitmap specifying type attributes */
+#define TKIND_BASIC_MIN 1
 #define TKIND_SIGNED    1
 #define TKIND_UNSIGNED  2
 #define TKIND_FLOAT     3
+#define TKIND_BASIC_MAX 3
 #define TKIND_POINTER   4
 #define TKIND_STRUCT    5
 #define TKIND_UNION     6

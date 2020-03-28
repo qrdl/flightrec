@@ -37,6 +37,8 @@
 #include "requests.h"
 #include "jsonapi.h"
 
+#include "expressions/expression.h"
+
 // list of frames - for speed minimise new allocations/deallocations, try to reuse already allocated items
 // rewrite of list happens much more often than search
 struct frame {
@@ -74,7 +76,6 @@ static void *continue_cursor = NULL;
 static void *revcontinue_cursor = NULL;
 static void *local_vars_cursor = NULL;
 static void *global_vars_cursor = NULL;
-
 
 /**************************************************************************
  *
@@ -222,7 +223,6 @@ int process_launch(const JSON_OBJ *request, int fd) {
         error = "Cannot create breakpoint index";    // error is logged by DAB_EXEC()
         RETCLEAN(FAILURE);
     }
-
 
     // get first step from DB and set it as current step
     void *cursor;
@@ -406,7 +406,6 @@ int process_stack(const JSON_OBJ *request, int fd) {
         cur_frame->line = line;
         prev_frame = cur_frame;
         cur_frame = cur_frame->next;
-        INFO("Added frame %lu", id);
 
         if (id < skip_frames) {
             id++;
@@ -1294,6 +1293,101 @@ int just_ack(const JSON_OBJ *request, int fd) {
 
 /**************************************************************************
  *
+ *  Function:   process_evaluate
+ *
+ *  Params:     request - JSON request
+ *              fd - descriptior to send response to
+ *
+ *  Return:     SUCCESS / FAILURE
+ *
+ *  Descr:      Process IDE's 'evaluate' request.
+ *
+ **************************************************************************/
+int process_evaluate(const JSON_OBJ *request, int fd) {
+    JSON_OBJ *rsp = JSON_NEW_OBJ();
+    int ret = SUCCESS;
+    char *error = NULL;
+    const char *response;
+    struct ast_node *ast = NULL;
+
+    JSON_OBJ *req = JSON_GET_OBJ(request, "arguments");
+    if (JSON_OK != json_err) {
+        error = "Cannot find 'argument' param in 'evaluate' request";
+        ERR(error);
+        RETCLEAN(FAILURE);
+    }
+
+    const char *expr_text = JSON_GET_STRING_FIELD(req, "expression");
+    if (JSON_OK != json_err) {
+        error = "Cannot get 'expression' param in 'evaluate' request";
+        ERR(error);
+        RETCLEAN(FAILURE);
+    }
+
+    uint64_t frame_id = JSON_GET_INT64_FIELD(req, "frameId");
+    uint64_t scope = GLOBAL_SCOPE;
+    uint64_t step = cur_step;
+    if (JSON_OK == json_err) {
+        /* find the scope for the frame specified */
+        struct frame *cur_frame;
+        for (cur_frame = frame_list; cur_frame; cur_frame = cur_frame->next) {
+            if (cur_frame->id == (unsigned)frame_id) {
+                break;
+            }
+        }
+        if (!cur_frame) {
+            error = "Unknown 'frameId' specified in 'evaluate' request";
+            ERR(error);
+            RETCLEAN(FAILURE);
+        }
+        scope = cur_frame->scope;
+        step = cur_frame->step;
+    } else if (JSON_OK != json_err) {
+        error = "Cannot get 'frameId' param in 'evaluate' request";
+        ERR(error);
+        RETCLEAN(FAILURE);
+    }
+
+    uint64_t id;
+    if (SUCCESS != query_expr_cache(expr_text, &id, &ast)) {
+        error = "Cannot read expression cache";
+        ERR(error);
+        RETCLEAN(FAILURE);
+    }
+    if (!ast) {
+        ast = expr_parse(expr_text, scope, &error);
+        if (error) {
+            ERR(error);
+            RETCLEAN(FAILURE);
+        }
+        if (SUCCESS != update_expr_cache(id, ast)) {
+            free_ast_node(ast);
+            error = "Cannot update expression cache";
+            ERR(error);
+            RETCLEAN(FAILURE);
+        }
+    }
+
+    JSON_OBJ *body = JSON_NEW_OBJ_FIELD(rsp, "body");
+    if (FAILURE == get_eval_result(body, id, ast, step, &error)) {
+        RETCLEAN(FAILURE);
+    }
+
+cleanup:
+    response = build_response(request, rsp, ret, SUCCESS == ret ? NULL : error);
+    int err = send_message(fd, response);
+    if (SUCCESS != err) {
+        ERR("Cannot send response");
+        return FAILURE;
+    }
+    JSON_RELEASE(rsp);
+
+    return ret;
+}
+
+
+/**************************************************************************
+ *
  *  Function:   build_response
  *
  *  Params:     request - JSON request
@@ -1458,5 +1552,7 @@ void release_cursors(void) {
     DAB_CURSOR_FREE(heap_cursor);
     DAB_CURSOR_FREE(func_cursor);
     DAB_CURSOR_FREE(type_name_cursor);
+
+    close_expr_cursors();
 }
 
