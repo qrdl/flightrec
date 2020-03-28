@@ -1253,3 +1253,4 @@ void close_expr_cursors(void) {
     }
     DAB_CURSOR_FREE(ast_cache);
 }
+

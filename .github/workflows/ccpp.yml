@@ -21,7 +21,7 @@ jobs:
     - name: Install other dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y libdwarf-dev libelf-dev libsqlite3-dev gperf nodejs npm
+        sudo apt-get install -y libdwarf-dev libelf-dev libsqlite3-dev gperf nodejs npm bison flex
         sudo npm install vsce -g
     - name: make
       run: make

@@ -1553,6 +1553,6 @@ void release_cursors(void) {
     DAB_CURSOR_FREE(func_cursor);
     DAB_CURSOR_FREE(type_name_cursor);
 
-    void close_expr_cursors();
+    close_expr_cursors();
 }
 
