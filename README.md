@@ -42,11 +42,12 @@ To build Flightrec make sure you have:
 * [GNU gperf](https://www.gnu.org/software/gperf/) (Linux package name _gperf_)
 * [Flex](https://github.com/westes/flex) (Linux package name _flex_)
 * [GNU Bison](https://www.gnu.org/software/bison/) (Linux package name _bison_)
+
 Also following libraries are required (with Ubuntu package names, other distributions may use different names):
 * libelf (`libelf-dev`)
 * libdwarf (`libdwarf-dev`)
 * sqlite3 (`libsqlite3-dev`)
-* json-c (`libjson-c-dev`) version 1.13 or above
+* json-c (`libjson-c-dev`) version 1.13 or above (versions below 1.13 aren't compatible with Flightrec)
 
 ### VSCode extension
 To package VSCode extension you need to have [Node.js](https://nodejs.org/) installed, with [vsce](https://github.com/microsoft/vscode-vsce).
