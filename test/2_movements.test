@@ -430,4 +430,80 @@ case "Step out to main" {
     }
 }
 
+case "Reverse continue (to start)" {
+    request '{"command":"reverseContinue","arguments":{"threadId":1},"type":"request","seq":30}'
+    response {
+        expect /type == "response"
+        expect /command == reverseContinue
+        expect /request_seq == 30
+        expect /success == true
+    }
+    response {
+        expect /type == event
+        expect /event == stopped
+        expect /body/reason == entry
+    }
+    request '{"command":"stackTrace","arguments":{"threadId":1,"startFrame":0,"levels":20},"type":"request","seq":31}'
+    response {
+        expect /type == "response"
+        expect /command == stackTrace
+        expect /request_seq == 31
+        expect /success == true
+        expect /body/totalFrames == 1
+        
+        expect /body/stackFrames[0]/name == main
+        expect /body/stackFrames[0]/id == 0
+        expect /body/stackFrames[0]/line == 29
+        expect /body/stackFrames[0]/column == 0
+        expect /body/stackFrames[0]/source/name == a.c
+        expect /body/stackFrames[0]/source/path == "$(path)/a.c"
+        expect /body/stackFrames[0]/source/sourceReference == 0
+    }
+}
+
+case "Continue (to end)" {
+    request '{"command":"continue","arguments":{"threadId":1},"type":"request","seq":32}'
+    response {
+        expect /type == "response"
+        expect /command == continue
+        expect /request_seq == 32
+        expect /success == true
+    }
+    response {
+        expect /type == event
+        expect /event == stopped
+        expect /body/reason == exit
+    }
+    request '{"command":"stackTrace","arguments":{"threadId":1,"startFrame":0,"levels":20},"type":"request","seq":33}'
+    response {
+        expect /type == "response"
+        expect /command == stackTrace
+        expect /request_seq == 33
+        expect /success == true
+        expect /body/totalFrames == 1
+        
+        expect /body/stackFrames[0]/name == main
+        expect /body/stackFrames[0]/id == 0
+        expect /body/stackFrames[0]/line == 54
+        expect /body/stackFrames[0]/column == 0
+        expect /body/stackFrames[0]/source/name == a.c
+        expect /body/stackFrames[0]/source/path == "$(path)/a.c"
+        expect /body/stackFrames[0]/source/sourceReference == 0
+    }
+}
+
+case "Next (terminate)" {
+    request '{"command":"next","arguments":{"threadId":1},"type":"request","seq":34}'
+    response {
+        expect /type == "response"
+        expect /command == next
+        expect /request_seq == 34
+        expect /success == true
+    }
+    response {
+        expect /type == event
+        expect /event == terminated
+    }
+}
+
 stop
