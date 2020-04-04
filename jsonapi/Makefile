@@ -4,7 +4,7 @@
 #
 #  Project:    	Flight recorder (https://github.com/qrdl/flightrec)
 #
-#  Descr:      	Expression parser/evaluator makefile
+#  Descr:      	JSON API makefile
 #
 #  Notes:
 #
@@ -26,30 +26,17 @@
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #
 ##########################################################################
-CFLAGS := -Wall -Wextra -g3 -I../../dab -I../../stingray -I../.. -I../../jsonapi -I..
+CFLAGS := -Wall -Wextra -g3
 
-.PHONY: all clean
+.PHONY : all clean jsonapi
 
-all: libexpr.a
+all: jsonapi
 
-libexpr.a: y.tab.o lex.yy.o expression.o
-	ar -rcs $@ $^
+jsonapi: jsonapi.o
 
-test: test.c expression.h libexpr.a
-	$(CC) -o $@ test.c -lfl -lexpr -L.
-
-expression.o: expression.c expression.h
-	$(CC) -c $(CFLAGS) -o $@ expression.c
-
-lex.yy.o: expr.l y.tab.h expression.h
-	lex expr.l
-	$(CC) -c -o $@ lex.yy.c -I../.. -I../../jsonapi
-
-y.tab.o: expr.y expression.h
-	yacc -d expr.y
-#	yacc -d -t expr.y
-	$(CC) -c -o $@ y.tab.c -I../.. -I../../jsonapi
+jsonapi.o: jsonapi.c jsonapi.h Makefile
+	$(CC) $(CFLAGS) -c -o $@ jsonapi.c
 
 clean:
-	rm -f lex.yy.c y.tab.c y.tab.h test expression.o lex.yy.o y.tab.o libexpr.a
+	rm -f test jsonapi.o
 

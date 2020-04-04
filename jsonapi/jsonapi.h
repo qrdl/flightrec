@@ -53,6 +53,7 @@
                                         })
 #define JSON_PRINT(O)                   json_object_to_json_string(O)
 #define JSON_GET_ARRAY_SIZE(O)          json_get_array_length(O)
+#define JSON_GET_OBJECT_TYPE(O)         json_object_get_type(O)
 #define JSON_NEW_OBJ()                  json_object_new_object()
 #define JSON_COPY_OBJ(O)                ({ \
                                             json_object *ret = NULL; \
@@ -61,7 +62,65 @@
                                         })
 #define JSON_RELEASE(O)                 json_object_put(O)
 
-/***** Get object fields by key *****/
+
+/***** Get object value *****/
+#define JSON_GET_STRING_VALUE(O)        ({ \
+                                            const char *ret = NULL; \
+                                            if (O) { \
+                                                json_err = JSON_OK; \
+                                                if (json_type_string != json_object_get_type(O)) \
+                                                    json_err = JSON_ERR_MISMATCH; \
+                                                else \
+                                                    ret = json_object_get_string(O); \
+                                            } \
+                                            ret; \
+                                        })
+#define JSON_GET_INT32_VALUE(O)         ({ \
+                                            int32_t ret = 0; \
+                                            if (O) { \
+                                                json_err = JSON_OK; \
+                                                if (json_type_int != json_object_get_type(O)) \
+                                                    json_err = JSON_ERR_MISMATCH; \
+                                                else \
+                                                    ret = json_object_get_int(O); \
+                                            } \
+                                            ret; \
+                                        })
+#define JSON_GET_INT64_VALUE(O)         ({ \
+                                            int64_t ret = 0; \
+                                            if (O) { \
+                                                json_err = JSON_OK; \
+                                                if (json_type_int != json_object_get_type(O)) \
+                                                    json_err = JSON_ERR_MISMATCH; \
+                                                else \
+                                                    ret = json_object_get_int64(O); \
+                                            } \
+                                            ret; \
+                                        })
+#define JSON_GET_DBL_VALUE(O)           ({ \
+                                            double ret = 0; \
+                                            if (O) { \
+                                                json_err = JSON_OK; \
+                                                if (json_type_double != json_object_get_type(O)) \
+                                                    json_err = JSON_ERR_MISMATCH; \
+                                                else \
+                                                    ret = json_object_get_double(O); \
+                                            } \
+                                            ret; \
+                                        })
+#define JSON_GET_BOOL_VALUE(O)          ({ \
+                                            int ret = 0; \
+                                            if (O) { \
+                                                json_err = JSON_OK; \
+                                                if (json_type_boolean != json_object_get_type(O)) \
+                                                    json_err = JSON_ERR_MISMATCH; \
+                                                else \
+                                                    ret = json_object_get_boolean(O); \
+                                            } \
+                                            ret; \
+                                        })
+
+/***** Get object field value by key *****/
 #define JSON_GET_OBJ(O,K)               ({ \
                                             json_object *ret = NULL; \
                                             if (O) { \
@@ -153,7 +212,7 @@
                                             ret; \
                                         })
 
-/***** Get array items by index *****/
+/***** Get array item value by index *****/
 #define JSON_GET_ITEM(O,I)              ({ \
                                             json_err = JSON_OK; \
                                             json_object *ret = json_object_array_get_idx(O, I); \

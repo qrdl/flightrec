@@ -28,15 +28,19 @@
 ##########################################################################
 TOPTARGETS = all clean
 
-SUBDIRS = dab stingray record examine vscode_extension
+SUBDIRS = dab stingray jsonapi record examine vscode_extension test
 
 $(TOPTARGETS): $(SUBDIRS)
 
 $(SUBDIRS):
 	$(MAKE) -C $@ $(MAKECMDGOALS)
 
+tests:
+	$(MAKE) -C test prepare
+	$(MAKE) -C test run
+
 clean:
 	rm -f fr_record fr_preload.so vscode_extension/fr_examine
 
-.PHONY: $(TOPTARGETS) $(SUBDIRS)
+.PHONY: $(TOPTARGETS) $(SUBDIRS) tests
 
