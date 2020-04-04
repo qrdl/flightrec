@@ -31,7 +31,8 @@
  **************************************************************************/
 #ifndef _JSONAPI_H
 #define _JSONAPI_H
-
+/* stddef.h is required as json.h doesn't include it and uses size_t */
+#include <stddef.h>
 #include <json-c/json.h>
 
 #define JSON_ERR_MIN        0
