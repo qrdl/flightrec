@@ -11,7 +11,7 @@ test: $(OBJFILES)
 
 test.fr prepare: test
 #	dwarfdump ./test >test.dump
-	../fr_record -- ./test
+	../fr_record -l test.log -- ./test
 
 run: test.fr tester
 	./tester -v path="$(shell pwd)" *.test

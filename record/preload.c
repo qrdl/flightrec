@@ -180,10 +180,6 @@ static __attribute__((constructor)) void init(void) {
     char pidstr[17];
     int_to_hex_string(getpid(), pidstr);
     strcat(fifo_name, pidstr);
-    
-    write(2, pidstr, strlen(pidstr));
-    char eol = '\n';
-    write(2, &eol, 1);
 
     /* By this time tracer should have already created the pipe, but to be on the
        safe side create it here as well */

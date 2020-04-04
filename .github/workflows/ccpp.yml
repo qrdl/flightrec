@@ -25,10 +25,6 @@ jobs:
         sudo npm install vsce -g
     - name: make
       run: make
-    - name: prepare for test
-      run: cd test && make prepare
-    - name: test
-      run: cd test && make run
     - name: Record artifact
       uses: actions/upload-artifact@v1
       with:
