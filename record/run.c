@@ -112,6 +112,7 @@ int record(char *fr_path, char *params[]) {
             ERR("Cannot open named pipe: %s", strerror(errno));
             return FAILURE;
         }
+        ERR("FIFO %s created", fifo_name);
 
         // set breakpoints for all known source lines in child process
         if (SUCCESS != set_breakpoints(pid)) {
