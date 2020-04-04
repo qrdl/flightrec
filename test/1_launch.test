@@ -75,7 +75,7 @@ case "Stack trace" {
         expect /body/totalFrames == 1
         expect /body/stackFrames[0]/name == main
         expect /body/stackFrames[0]/id == 0
-        expect /body/stackFrames[0]/line == 26
+        expect /body/stackFrames[0]/line == 29
         expect /body/stackFrames[0]/column == 0
         expect /body/stackFrames[0]/source/name == a.c
         expect /body/stackFrames[0]/source/path == "$(path)/a.c"
@@ -83,4 +83,3 @@ case "Stack trace" {
     }
 }
 
-stop
