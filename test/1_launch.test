@@ -2,17 +2,16 @@
 start "../examine/fr_examine"
 
 case "Init" {
-	request '{"command":"initialize","arguments":{"clientID":"tester","clientName":"Tester"},"type":"request","seq":1}'
+    request '{"command":"initialize","arguments":{"clientID":"tester","clientName":"Tester"},"type":"request","seq":1}'
     # response
-	response {
-		expect /type == "response"
+    response {
+        expect /type == "response"
         expect /request_seq == 1
         expect /command == initialize
         expect /success == true
         expect /body/supportsConfigurationDoneRequest == true
         expect /body/supportsStepBack == true
         expect /body/supportsStepInTargetsRequest == true
-
     }
     # init done event
     response {
@@ -24,8 +23,8 @@ case "Init" {
 case "Launch" {
     request '{"command":"launch","arguments":{"request":"launch","program":"$(path)/test","sourcePath":"$(path)","stopOnEntry":true,},"type":"request","seq":2}'
     # response
-	response {
-		expect /type == "response"
+    response {
+        expect /type == "response"
         expect /command == launch
         expect /request_seq == 2
         expect /success == true
@@ -43,8 +42,8 @@ case "Stop on entry" {
 case "Config done" {
     request '{"command":"configurationDone","type":"request","seq":3}'
     # response
-	response {
-		expect /type == "response"
+    response {
+        expect /type == "response"
         expect /command == configurationDone
         expect /request_seq == 3
         expect /success == true
@@ -54,8 +53,8 @@ case "Config done" {
 case "Thread list" {
     request '{"command":"threads","type":"request","seq":4}'
     # response
-	response {
-		expect /type == "response"
+    response {
+        expect /type == "response"
         expect /command == threads
         expect /request_seq == 4
         expect /success == true
@@ -67,8 +66,8 @@ case "Thread list" {
 case "Stack trace" {
     request '{"command":"stackTrace","arguments":{"threadId":1,"startFrame":0,"levels":20},"type":"request","seq":5}'
     # response
-	response {
-		expect /type == "response"
+    response {
+        expect /type == "response"
         expect /command == stackTrace
         expect /request_seq == 5
         expect /success == true

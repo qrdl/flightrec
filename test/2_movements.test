@@ -3,8 +3,8 @@
 
 case "Next from first line" {
     request '{"command":"next","arguments":{"threadId":1},"type":"request","seq":8}'
-	response {
-		expect /type == "response"
+    response {
+        expect /type == "response"
         expect /command == next
         expect /request_seq == 8
         expect /success == true
@@ -15,8 +15,8 @@ case "Next from first line" {
         expect /body/reason == step
     }
     request '{"command":"stackTrace","arguments":{"threadId":1,"startFrame":0,"levels":20},"type":"request","seq":9}'
-	response {
-		expect /type == "response"
+    response {
+        expect /type == "response"
         expect /command == stackTrace
         expect /request_seq == 9
         expect /success == true
@@ -34,8 +34,8 @@ case "Next from first line" {
 
 case "Step into function" {
     request '{"command":"stepIn","arguments":{"threadId":1},"type":"request","seq":10}'
-	response {
-		expect /type == "response"
+    response {
+        expect /type == "response"
         expect /command == stepIn
         expect /request_seq == 10
         expect /success == true
@@ -46,8 +46,8 @@ case "Step into function" {
         expect /body/reason == step
     }
     request '{"command":"stackTrace","arguments":{"threadId":1,"startFrame":0,"levels":20},"type":"request","seq":11}'
-	response {
-		expect /type == "response"
+    response {
+        expect /type == "response"
         expect /command == stackTrace
         expect /request_seq == 11
         expect /success == true
@@ -73,8 +73,8 @@ case "Step into function" {
 
 case "Step in - next line" {
     request '{"command":"stepIn","arguments":{"threadId":1},"type":"request","seq":12}'
-	response {
-		expect /type == "response"
+    response {
+        expect /type == "response"
         expect /command == stepIn
         expect /request_seq == 12
         expect /success == true
@@ -85,8 +85,8 @@ case "Step in - next line" {
         expect /body/reason == step
     }
     request '{"command":"stackTrace","arguments":{"threadId":1,"startFrame":0,"levels":20},"type":"request","seq":13}'
-	response {
-		expect /type == "response"
+    response {
+        expect /type == "response"
         expect /command == stackTrace
         expect /request_seq == 13
         expect /success == true
@@ -112,8 +112,8 @@ case "Step in - next line" {
 
 case "Step into function in different unit" {
     request '{"command":"stepIn","arguments":{"threadId":1},"type":"request","seq":14}'
-	response {
-		expect /type == "response"
+    response {
+        expect /type == "response"
         expect /command == stepIn
         expect /request_seq == 14
         expect /success == true
@@ -124,8 +124,8 @@ case "Step into function in different unit" {
         expect /body/reason == step
     }
     request '{"command":"stackTrace","arguments":{"threadId":1,"startFrame":0,"levels":20},"type":"request","seq":15}'
-	response {
-		expect /type == "response"
+    response {
+        expect /type == "response"
         expect /command == stackTrace
         expect /request_seq == 15
         expect /success == true
@@ -159,8 +159,8 @@ case "Step into function in different unit" {
 
 case "Next" {
     request '{"command":"stepIn","arguments":{"threadId":1},"type":"request","seq":16}'
-	response {
-		expect /type == "response"
+    response {
+        expect /type == "response"
         expect /command == stepIn
         expect /request_seq == 16
         expect /success == true
@@ -171,8 +171,8 @@ case "Next" {
         expect /body/reason == step
     }
     request '{"command":"stackTrace","arguments":{"threadId":1,"startFrame":0,"levels":20},"type":"request","seq":17}'
-	response {
-		expect /type == "response"
+    response {
+        expect /type == "response"
         expect /command == stackTrace
         expect /request_seq == 17
         expect /success == true
@@ -206,8 +206,8 @@ case "Next" {
 
 case "Step out" {
     request '{"command":"stepOut","arguments":{"threadId":1},"type":"request","seq":18}'
-	response {
-		expect /type == "response"
+    response {
+        expect /type == "response"
         expect /command == stepOut  
         expect /request_seq == 18
         expect /success == true
@@ -218,8 +218,8 @@ case "Step out" {
         expect /body/reason == step
     }
     request '{"command":"stackTrace","arguments":{"threadId":1,"startFrame":0,"levels":20},"type":"request","seq":19}'
-	response {
-		expect /type == "response"
+    response {
+        expect /type == "response"
         expect /command == stackTrace
         expect /request_seq == 19
         expect /success == true
@@ -245,8 +245,8 @@ case "Step out" {
 
 case "Next (step over function call)" {
     request '{"command":"next","arguments":{"threadId":1},"type":"request","seq":20}'
-	response {
-		expect /type == "response"
+    response {
+        expect /type == "response"
         expect /command == next
         expect /request_seq == 20
         expect /success == true
@@ -257,8 +257,8 @@ case "Next (step over function call)" {
         expect /body/reason == step
     }
     request '{"command":"stackTrace","arguments":{"threadId":1,"startFrame":0,"levels":20},"type":"request","seq":19}'
-	response {
-		expect /type == "response"
+    response {
+        expect /type == "response"
         expect /command == stackTrace
         expect /request_seq == 19
         expect /success == true
@@ -284,8 +284,8 @@ case "Next (step over function call)" {
 
 case "Step in (no function call, equivalent to next)" {
     request '{"command":"stepIn","arguments":{"threadId":1},"type":"request","seq":22}'
-	response {
-		expect /type == "response"
+    response {
+        expect /type == "response"
         expect /command == stepIn
         expect /request_seq == 22
         expect /success == true
@@ -296,8 +296,8 @@ case "Step in (no function call, equivalent to next)" {
         expect /body/reason == step
     }
     request '{"command":"stackTrace","arguments":{"threadId":1,"startFrame":0,"levels":20},"type":"request","seq":23}'
-	response {
-		expect /type == "response"
+    response {
+        expect /type == "response"
         expect /command == stackTrace
         expect /request_seq == 23
         expect /success == true
@@ -323,8 +323,8 @@ case "Step in (no function call, equivalent to next)" {
 
 case "Step back one line" {
     request '{"command":"stepBack","arguments":{"threadId":1},"type":"request","seq":24}'
-	response {
-		expect /type == "response"
+    response {
+        expect /type == "response"
         expect /command == stepBack
         expect /request_seq == 24
         expect /success == true
@@ -335,8 +335,8 @@ case "Step back one line" {
         expect /body/reason == step
     }
     request '{"command":"stackTrace","arguments":{"threadId":1,"startFrame":0,"levels":20},"type":"request","seq":25}'
-	response {
-		expect /type == "response"
+    response {
+        expect /type == "response"
         expect /command == stackTrace
         expect /request_seq == 25
         expect /success == true
@@ -362,8 +362,8 @@ case "Step back one line" {
 
 case "Step back over function call" {
     request '{"command":"stepBack","arguments":{"threadId":1},"type":"request","seq":26}'
-	response {
-		expect /type == "response"
+    response {
+        expect /type == "response"
         expect /command == stepBack
         expect /request_seq == 26
         expect /success == true
@@ -374,8 +374,8 @@ case "Step back over function call" {
         expect /body/reason == step
     }
     request '{"command":"stackTrace","arguments":{"threadId":1,"startFrame":0,"levels":20},"type":"request","seq":27}'
-	response {
-		expect /type == "response"
+    response {
+        expect /type == "response"
         expect /command == stackTrace
         expect /request_seq == 27
         expect /success == true
@@ -401,8 +401,8 @@ case "Step back over function call" {
 
 case "Step out to main" {
     request '{"command":"stepOut","arguments":{"threadId":1},"type":"request","seq":28}'
-	response {
-		expect /type == "response"
+    response {
+        expect /type == "response"
         expect /command == stepOut
         expect /request_seq == 28
         expect /success == true
@@ -413,8 +413,8 @@ case "Step out to main" {
         expect /body/reason == step
     }
     request '{"command":"stackTrace","arguments":{"threadId":1,"startFrame":0,"levels":20},"type":"request","seq":29}'
-	response {
-		expect /type == "response"
+    response {
+        expect /type == "response"
         expect /command == stackTrace
         expect /request_seq == 29
         expect /success == true
