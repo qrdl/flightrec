@@ -28,17 +28,18 @@ jobs:
     - name: test
       run: make tests
     - name: Record artifact
-      uses: actions/upload-artifact@1
+      uses: actions/upload-artifact@v1
       with:
         name: record
         path: fr_record
     - name: Preload artifact
-      uses: actions/upload-artifact@1
+      uses: actions/upload-artifact@v1
       with:
         name: preload
         path: fr_preload.so
     - name: VS Code extension artifact
-      uses: actions/upload-artifact@1
+      uses: actions/upload-artifact@v1
       with:
         name: vscode_extension
         path: vscode_extension/flightrec-0.1.0.vsix
+
