@@ -9,7 +9,7 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
-    - name: Install latest json-c
+    - name: install latest json-c
       run: |
         git clone https://github.com/json-c/json-c.git
         cd json-c
@@ -18,10 +18,26 @@ jobs:
         make
         sudo make install
         cd ..
-    - name: Install other dependencies
+    - name: install other dependencies
       run: |
         sudo apt-get update
         sudo apt-get install -y libdwarf-dev libelf-dev libsqlite3-dev gperf nodejs npm bison flex
         sudo npm install vsce -g
     - name: make
       run: make
+    - name: Record artifact
+      uses: actions/upload-artifact@v1
+      with:
+        name: record
+        path: fr_record
+    - name: Preload artifact
+      uses: actions/upload-artifact@v1
+      with:
+        name: preload
+        path: fr_preload.so
+    - name: VS Code extension artifact
+      uses: actions/upload-artifact@v1
+      with:
+        name: vscode_extension
+        path: vscode_extension/flightrec-0.1.0.vsix
+

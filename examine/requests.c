@@ -55,6 +55,8 @@ static void event_stopped(const char *reason, int fd);
 static void event_inited(int fd);
 static void event_terminated(int fd);
 static void send_event(JSON_OBJ *evt, const char *type, int fd);
+static int set_first_step(const char **error);
+static int set_last_step(const char **error);
 
 // current execution context
 char        *cur_file;
@@ -224,34 +226,7 @@ int process_launch(const JSON_OBJ *request, int fd) {
         RETCLEAN(FAILURE);
     }
 
-    // get first step from DB and set it as current step
-    void *cursor;
-    int db_err = DAB_CURSOR_OPEN(&cursor, "SELECT "
-                "f.name, "
-                "s.line "
-            "FROM "
-                "file f JOIN "
-                "step s ON "
-                    "f.id = s.file_id "
-            "WHERE "
-                "s.id = 1");
-    if (DAB_OK != db_err) {
-        error = "Cannot query database";    // error is logged by DAB_CURSOR_OPEN()
-        RETCLEAN(FAILURE);
-    }
-
-    db_err = DAB_CURSOR_FETCH(cursor, &cur_file, &cur_line);
-    DAB_CURSOR_FREE(cursor);
-    if (DAB_NO_DATA == db_err) {
-        error = "DB doesn't contain execution info";
-        ERR(error);
-        RETCLEAN(FAILURE);
-    } else if (DAB_OK != db_err) {
-        error = "Cannot get step info from DB";     // error logged by FETCH
-        RETCLEAN(FAILURE);
-    }
-    cur_step = 1;
-    cur_depth = 1;
+    ret = set_first_step(&error);
 
 cleanup:
     response = build_response(request, rsp, ret, SUCCESS == ret ? NULL : error);
@@ -464,6 +439,7 @@ int process_next(const JSON_OBJ *request, int fd) {
     int ret = SUCCESS;
     const char *error;
     const char *response;
+    int term = 0;
 
     if (!next_cursor) {
         if (DAB_OK != DAB_CURSOR_OPEN(&next_cursor,
@@ -494,8 +470,8 @@ int process_next(const JSON_OBJ *request, int fd) {
 
     ret = DAB_CURSOR_FETCH(next_cursor, &cur_file, &cur_line, &cur_step, &cur_depth);
     if (DAB_NO_DATA == ret) {
-        event_terminated(fd);
-        RETCLEAN(FAILURE);
+        term = 1;
+        ret = SUCCESS;
     } else if (DAB_OK != ret) {
         ERR("Cannot get next step");
         RETCLEAN(FAILURE);
@@ -512,7 +488,9 @@ cleanup:
     }
     JSON_RELEASE(rsp);
 
-    if (SUCCESS == ret) {
+    if (term) {
+        event_terminated(fd);
+    } else if (SUCCESS == ret) {
         event_stopped("step", fd);
     }
 
@@ -537,6 +515,7 @@ int process_stepin(const JSON_OBJ *request, int fd) {
     int ret = SUCCESS;
     const char *error;
     const char *response;
+    int term = 0;
 
     if (!stepin_cursor) {
         if (DAB_OK != DAB_CURSOR_OPEN(&stepin_cursor,
@@ -563,8 +542,8 @@ int process_stepin(const JSON_OBJ *request, int fd) {
 
     ret = DAB_CURSOR_FETCH(stepin_cursor, &cur_file, &cur_line, &cur_step, &cur_depth);
     if (DAB_NO_DATA == ret) {
-        event_terminated(fd);
-        RETCLEAN(FAILURE);
+        term = 1;
+        ret = SUCCESS;
     } else if (DAB_OK != ret) {
         ERR("Cannot get next step");
         RETCLEAN(FAILURE);
@@ -581,7 +560,9 @@ cleanup:
     }
     JSON_RELEASE(rsp);
 
-    if (SUCCESS == ret) {
+    if (term) {
+        event_terminated(fd);
+    } else if (SUCCESS == ret) {
         event_stopped("step", fd);
     }
 
@@ -606,6 +587,7 @@ int process_stepout(const JSON_OBJ *request, int fd) {
     int ret = SUCCESS;
     const char *error;
     const char *response;
+    int term = 0;
 
     if (cur_depth <= 1) {   // do nothing - already at top level
         RETCLEAN(SUCCESS);
@@ -640,8 +622,8 @@ int process_stepout(const JSON_OBJ *request, int fd) {
 
     ret = DAB_CURSOR_FETCH(stepout_cursor, &cur_file, &cur_line, &cur_step, &cur_depth);
     if (DAB_NO_DATA == ret) {
-        event_terminated(fd);
-        RETCLEAN(FAILURE);
+        term = 1;
+        ret = SUCCESS;
     } else if (DAB_OK != ret) {
         ERR("Cannot get next step");
         RETCLEAN(FAILURE);
@@ -658,7 +640,9 @@ cleanup:
     }
     JSON_RELEASE(rsp);
 
-    if (SUCCESS == ret) {
+    if (term) {
+        event_terminated(fd);
+    } else if (SUCCESS == ret) {
         event_stopped("step", fd);
     }
 
@@ -686,8 +670,10 @@ int process_stepback(const JSON_OBJ *request, int fd) {
     int ret = SUCCESS;
     const char *error;
     const char *response;
+    int term = 0;
 
     if (cur_step <= 1) {
+        term = 1;
         RETCLEAN(SUCCESS);  // already at first step - nothing to do
     }
 
@@ -719,10 +705,7 @@ int process_stepback(const JSON_OBJ *request, int fd) {
     }
 
     ret = DAB_CURSOR_FETCH(stepback_cursor, &cur_file, &cur_line, &cur_step, &cur_depth);
-    if (DAB_NO_DATA == ret) {
-        event_terminated(fd);
-        RETCLEAN(FAILURE);
-    } else if (DAB_OK != ret) {
+    if (DAB_OK != ret) {
         ERR("Cannot get next step");
         RETCLEAN(FAILURE);
     } else {
@@ -738,7 +721,9 @@ cleanup:
     }
     JSON_RELEASE(rsp);
 
-    if (SUCCESS == ret) {
+    if (term) {
+        event_terminated(fd);
+    } else if (SUCCESS == ret) {
         event_stopped("step", fd);
     }
 
@@ -898,6 +883,7 @@ int process_continue(const JSON_OBJ *request, int fd) {
     int ret = SUCCESS;
     const char *error;
     const char *response;
+    char *stop_reason;
 
     if (!continue_cursor) {
         if (DAB_OK != DAB_CURSOR_OPEN(&continue_cursor,
@@ -929,12 +915,13 @@ int process_continue(const JSON_OBJ *request, int fd) {
 
     ret = DAB_CURSOR_FETCH(continue_cursor, &cur_file, &cur_line, &cur_step, &cur_depth);
     if (DAB_NO_DATA == ret) {
-        event_terminated(fd);
-        RETCLEAN(FAILURE);
+        stop_reason = "exit";
+        ret = set_last_step(&error);
     } else if (DAB_OK != ret) {
         ERR("Cannot get next step");
         RETCLEAN(FAILURE);
     } else {
+        stop_reason = "breakpoint";
         ret = SUCCESS;
     }
 
@@ -948,7 +935,7 @@ cleanup:
     JSON_RELEASE(rsp);
 
     if (SUCCESS == ret) {
-        event_stopped("breakpoint", fd);
+        event_stopped(stop_reason, fd);
     }
 
     return ret;
@@ -972,6 +959,7 @@ int process_revcontinue(const JSON_OBJ *request, int fd) {
     int ret = SUCCESS;
     const char *error = NULL;
     const char *response;
+    char *stop_reason;
 
     if (!revcontinue_cursor) {
         if (DAB_OK != DAB_CURSOR_OPEN(&revcontinue_cursor,
@@ -1003,12 +991,13 @@ int process_revcontinue(const JSON_OBJ *request, int fd) {
 
     ret = DAB_CURSOR_FETCH(revcontinue_cursor, &cur_file, &cur_line, &cur_step, &cur_depth);
     if (DAB_NO_DATA == ret) {
-        event_terminated(fd);
-        RETCLEAN(FAILURE);
+        stop_reason = "entry";
+        ret = set_first_step(&error);
     } else if (DAB_OK != ret) {
         ERR("Cannot get next step");
         RETCLEAN(FAILURE);
     } else {
+        stop_reason = "breakpoint";
         ret = SUCCESS;
     }
 
@@ -1022,7 +1011,7 @@ cleanup:
     JSON_RELEASE(rsp);
 
     if (SUCCESS == ret) {
-        event_stopped("breakpoint", fd);
+        event_stopped(stop_reason, fd);
     }
 
     return ret;
@@ -1556,3 +1545,92 @@ void release_cursors(void) {
     close_expr_cursors();
 }
 
+
+/**************************************************************************
+ *
+ *  Function:   set_first_step
+ *
+ *  Params:     errors - where to store error message
+ *
+ *  Return:     SUCCESS / FAILURE
+ *
+ *  Descr:      Set first step as current step
+ *
+ **************************************************************************/
+int set_first_step(const char **error) {
+    // get first step from DB and set it as current step
+    void *cursor;
+    int db_err = DAB_CURSOR_OPEN(&cursor, "SELECT "
+                "f.name, "
+                "s.line "
+            "FROM "
+                "file f JOIN "
+                "step s ON "
+                    "f.id = s.file_id "
+            "WHERE "
+                "s.id = 1");
+    if (DAB_OK != db_err) {
+        *error = "Cannot query database";    // error is logged by DAB_CURSOR_OPEN()
+        return FAILURE;
+    }
+
+    db_err = DAB_CURSOR_FETCH(cursor, &cur_file, &cur_line);
+    DAB_CURSOR_FREE(cursor);
+    if (DAB_NO_DATA == db_err) {
+        *error = "DB doesn't contain execution info";
+        ERR(*error);
+        return FAILURE;
+    } else if (DAB_OK != db_err) {
+        *error = "Cannot get step info from DB";     // error logged by FETCH
+        return FAILURE;
+    }
+    cur_step = 1;
+    cur_depth = 1;
+
+    return SUCCESS;
+}
+
+
+/**************************************************************************
+ *
+ *  Function:   set_last_step
+ *
+ *  Params:     errors - where to store error message
+ *
+ *  Return:     SUCCESS / FAILURE
+ *
+ *  Descr:      Set last step as current step
+ *
+ **************************************************************************/
+int set_last_step(const char **error) {
+    // get last step from DB and set it as current step
+    void *cursor;
+    int db_err = DAB_CURSOR_OPEN(&cursor, "SELECT "
+                "f.name, "
+                "s.line, "
+                "s.id "
+            "FROM "
+                "file f JOIN "
+                "step s ON "
+                    "f.id = s.file_id "
+            "WHERE "
+                "s.id = (SELECT MAX(id) FROM step)");
+    if (DAB_OK != db_err) {
+        *error = "Cannot query database";    // error is logged by DAB_CURSOR_OPEN()
+        return FAILURE;
+    }
+
+    db_err = DAB_CURSOR_FETCH(cursor, &cur_file, &cur_line, &cur_step);
+    DAB_CURSOR_FREE(cursor);
+    if (DAB_NO_DATA == db_err) {
+        *error = "DB doesn't contain execution info";
+        ERR(*error);
+        return FAILURE;
+    } else if (DAB_OK != db_err) {
+        *error = "Cannot get step info from DB";     // error logged by FETCH
+        return FAILURE;
+    }
+    cur_depth = 1;
+
+    return SUCCESS;
+}

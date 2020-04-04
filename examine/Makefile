@@ -26,14 +26,14 @@
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #
 ##########################################################################
-CFLAGS := -Wall -Wextra -Wno-format-security -g3 -I../dab -I../stingray -I.. -I.
+CFLAGS := -Wall -Wextra -Wno-format-security -g3 -I../dab -I../stingray -I../jsonapi -I..
 LDLIBS := -lsqlite3 -ldwarf -lelf -ljson-c -lexpr -Lexpressions
 LDFLAGS := -pthread
 
 .PHONY: all clean depend expressions/libexpr.a
 
-DEPEND = ../dab/dab.o ../stingray/stingray.o
-OBJFILES = examine.o requests.o cmd_hash.o comms.o vars.o jsonapi.o
+DEPEND = ../dab/dab.o ../stingray/stingray.o ../jsonapi/jsonapi.o
+OBJFILES = examine.o requests.o cmd_hash.o comms.o vars.o
 
 all: fr_examine
 
@@ -55,11 +55,9 @@ depend: $(OBJFILES:.o=.c)
 # DO NOT DELETE
 
 examine.o: ../dab/dab.h ../generics.h ../eel.h examine.h ../flightrec.h
-examine.o: jsonapi.h requests.h
+examine.o: requests.h
 requests.o: ../eel.h ../dab/dab.h ../generics.h examine.h ../flightrec.h
-requests.o: jsonapi.h requests.h
-cmd_hash.o: requests.h jsonapi.h
-comms.o: ../eel.h examine.h ../flightrec.h jsonapi.h
-vars.o: ../eel.h ../dab/dab.h ../generics.h ../flightrec.h examine.h
-vars.o: jsonapi.h ../mem.h
-jsonapi.o: jsonapi.h
+requests.o: requests.h expressions/expression.h
+cmd_hash.o: requests.h
+comms.o: ../eel.h examine.h ../flightrec.h
+vars.o: ../eel.h ../dab/dab.h ../generics.h ../flightrec.h examine.h ../mem.h

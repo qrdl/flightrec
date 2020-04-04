@@ -20,11 +20,14 @@ int b(void) {
 }
 
 int a(void) {
+    int qwe = foo(5);
+    qwe = b();
+    qwe = 0;
     return b();
 }
 
 int main(void) {
-    int i;
+    int i = a();
     int *u = &i;
     int garr[5];
     struct bar bar[5];

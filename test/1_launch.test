@@ -1,0 +1,84 @@
+# Caller must set $(path)
+start "../examine/fr_examine"
+
+case "Init" {
+    request '{"command":"initialize","arguments":{"clientID":"tester","clientName":"Tester"},"type":"request","seq":1}'
+    # response
+    response {
+        expect /type == "response"
+        expect /request_seq == 1
+        expect /command == initialize
+        expect /success == true
+        expect /body/supportsConfigurationDoneRequest == true
+        expect /body/supportsStepBack == true
+        expect /body/supportsStepInTargetsRequest == true
+    }
+    # init done event
+    response {
+        expect /type == event
+        expect /event == initialized
+    }
+}
+
+case "Launch" {
+    request '{"command":"launch","arguments":{"request":"launch","program":"$(path)/test","sourcePath":"$(path)","stopOnEntry":true,},"type":"request","seq":2}'
+    # response
+    response {
+        expect /type == "response"
+        expect /command == launch
+        expect /request_seq == 2
+        expect /success == true
+    }
+}
+
+case "Stop on entry" {
+    response {
+        expect /type == event
+        expect /event == stopped
+        expect /body/reason == entry
+    }
+}
+
+case "Config done" {
+    request '{"command":"configurationDone","type":"request","seq":3}'
+    # response
+    response {
+        expect /type == "response"
+        expect /command == configurationDone
+        expect /request_seq == 3
+        expect /success == true
+    }
+}
+
+case "Thread list" {
+    request '{"command":"threads","type":"request","seq":4}'
+    # response
+    response {
+        expect /type == "response"
+        expect /command == threads
+        expect /request_seq == 4
+        expect /success == true
+        expect /body/threads[0]/name == "thread 1"
+        expect /body/threads[0]/id == 1
+    }
+}
+
+case "Stack trace" {
+    request '{"command":"stackTrace","arguments":{"threadId":1,"startFrame":0,"levels":20},"type":"request","seq":5}'
+    # response
+    response {
+        expect /type == "response"
+        expect /command == stackTrace
+        expect /request_seq == 5
+        expect /success == true
+        expect /body/totalFrames == 1
+        expect /body/stackFrames[0]/name == main
+        expect /body/stackFrames[0]/id == 0
+        expect /body/stackFrames[0]/line == 29
+        expect /body/stackFrames[0]/column == 0
+        expect /body/stackFrames[0]/source/name == a.c
+        expect /body/stackFrames[0]/source/path == "$(path)/a.c"
+        expect /body/stackFrames[0]/source/sourceReference == 0
+    }
+}
+

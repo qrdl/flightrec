@@ -1229,6 +1229,21 @@ int type_details(uint64_t type_offset, uint64_t *dim, uint64_t *type_kind) {
  *
  **************************************************************************/
 void close_expr_cursors(void) {
+    if (expr_addexpr_cursor) {
+        void *ast_cache;
+        if (DAB_OK != DAB_CURSOR_PREPARE(&ast_cache, "SELECT "
+                "ast "
+            "FROM "
+                "local.expr"
+        )) {
+            return;
+        }
+        uint64_t addr;
+        while (DAB_OK == DAB_CURSOR_FETCH(ast_cache, &addr)) {
+            free_ast_node((struct ast_node *)addr);
+        }
+        DAB_CURSOR_FREE(ast_cache);
+    }
     DAB_CURSOR_FREE(expr_struct_cursor);
     DAB_CURSOR_FREE(expr_type_cursor);
     DAB_CURSOR_FREE(expr_var_cursor);
@@ -1238,19 +1253,5 @@ void close_expr_cursors(void) {
     DAB_CURSOR_FREE(expr_getexpr_cursor);
     DAB_CURSOR_FREE(expr_updexpr_cursor);
     DAB_CURSOR_FREE(expr_typedetails_cursor);
-
-    void *ast_cache;
-    if (DAB_OK != DAB_CURSOR_PREPARE(&ast_cache, "SELECT "
-            "ast "
-        "FROM "
-            "local.expr"
-    )) {
-        return;
-    }
-    uint64_t addr;
-    while (DAB_OK == DAB_CURSOR_FETCH(ast_cache, &addr)) {
-        free_ast_node((struct ast_node *)addr);
-    }
-    DAB_CURSOR_FREE(ast_cache);
 }
 
