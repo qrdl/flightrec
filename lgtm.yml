@@ -8,6 +8,9 @@ extraction:
         - libelf-dev
         - libdwarf-dev
         - libjson-c-dev
+        - bison
+        - flex
+        - gperf
     after_prepare:    # Customizable step used by all languages.
       - export GNU_MAKE=make
       - export GIT=true
@@ -15,5 +18,7 @@ extraction:
       build_command:
         - $GNU_MAKE -C dab
         - $GNU_MAKE -C stingray
+        - $GNU_MAKE -C jsonapi
         - $GNU_MAKE -C record
         - $GNU_MAKE -C examine
+        - $GNU_MAKE -C test tester
