@@ -29,6 +29,7 @@
  **************************************************************************/
 #include <inttypes.h>
 #include <sys/types.h>
+#include <sys/ptrace.h>
 #include <string.h>
 #include <errno.h>
 #include <unistd.h>
@@ -65,8 +66,7 @@ static __m256i mask;
 #endif
 
 static struct region *regions, *cur_region;
-static FILE *pagemap;
-static int page_size;
+static FILE *pagemap = NULL;
 static pid_t pid;
 static char *clear_refs_filename;
 static int avx_supported = 0;
@@ -88,21 +88,21 @@ extern struct channel *insert_mem_ch;      // defined in run.c
  **************************************************************************/
 int mem_init(pid_t p) {
     pid = p;
-
     char tmp[256];
-    snprintf(tmp, sizeof(tmp), "/proc/%d/pagemap", pid);
-    pagemap = fopen(tmp, "rb");  // this is binary file
+
     if (!pagemap) {
-        ERR("Cannot open file '%s': %s", tmp, strerror(errno));
-        return FAILURE;
+        snprintf(tmp, sizeof(tmp), "/proc/%d/pagemap", pid);
+        pagemap = fopen(tmp, "rb");  // this is binary file
+        if (!pagemap) {
+            ERR("Cannot open file '%s': %s", tmp, strerror(errno));
+            return FAILURE;
+        }
     }
 
     snprintf(tmp, sizeof(tmp), "/proc/%d/clear_refs", pid);
     clear_refs_filename = strdup(tmp);
 
     memdiff = best_memdiff(MEM_SEGMENT_SIZE);    // get best memdiff implementtion based on available CPU features
-
-    page_size = getpagesize();
 
     if (SUCCESS != mem_read_regions()) {
         return FAILURE;
@@ -150,7 +150,7 @@ int mem_init(pid_t p) {
  *  Descr:      Find memory region boundaries by parsing /proc/<pid>/maps
  *
  **************************************************************************/
-int mem_first_region(uint64_t *start, uint64_t *end) {   
+int mem_first_region(uint64_t *start, uint64_t *end) {
     if (!regions) {
         cur_region = NULL;
         return END;
@@ -232,8 +232,8 @@ static inline int pages_clean(const char *buf) {
  *
  **************************************************************************/
 int mem_process_region(ULONG start, ULONG end, ULONG step_id, int force) {
-    uint64_t offset = start / page_size * sizeof(uint64_t);    // each page table entry is 64 bit
-    ULONG page_count = (end - start) / page_size;
+    uint64_t offset = start / PAGE_SIZE * sizeof(uint64_t);    // each page table entry is 64 bit
+    ULONG page_count = (end - start) / PAGE_SIZE;
     char *entry = malloc(page_count * PAGE_DESCR_SIZE);
 
     if (force) {
@@ -262,24 +262,24 @@ int mem_process_region(ULONG start, ULONG end, ULONG step_id, int force) {
                 /* at least one of 4 tested pages is dirty */
                 dirty_found = 1;
                 if (cur[DIRTY_OFFSET] & DIRTY_BIT) {
-                    if (SUCCESS != process_dirty_page(start + page_size*page_num, step_id)) {                
+                    if (SUCCESS != process_dirty_page(start + PAGE_SIZE*page_num, step_id)) {
                         return FAILURE;
-                    }              
+                    }
                 }
                 if (cur[DIRTY_OFFSET + PAGE_DESCR_SIZE] & DIRTY_BIT) {
-                    if (SUCCESS != process_dirty_page(start + page_size*(page_num+1), step_id)) {                
+                    if (SUCCESS != process_dirty_page(start + PAGE_SIZE*(page_num+1), step_id)) {
                         return FAILURE;
-                    }              
+                    }
                 }
                 if (cur[DIRTY_OFFSET + PAGE_DESCR_SIZE*2] & DIRTY_BIT) {
-                    if (SUCCESS != process_dirty_page(start + page_size*(page_num+2), step_id)) {                
+                    if (SUCCESS != process_dirty_page(start + PAGE_SIZE*(page_num+2), step_id)) {
                         return FAILURE;
-                    }              
+                    }
                 }
                 if (cur[DIRTY_OFFSET + PAGE_DESCR_SIZE*3] & DIRTY_BIT) {
-                    if (SUCCESS != process_dirty_page(start + page_size*(page_num+3), step_id)) {                
+                    if (SUCCESS != process_dirty_page(start + PAGE_SIZE*(page_num+3), step_id)) {
                         return FAILURE;
-                    }              
+                    }
                 }
             }
             cur += PAGE_DESCR_SIZE * 4;
@@ -290,7 +290,7 @@ int mem_process_region(ULONG start, ULONG end, ULONG step_id, int force) {
             case 3:
                 if (*cur & DIRTY_BIT) {
                     // found page with set soft-dirty bit
-                    if (SUCCESS != process_dirty_page(start + page_size*page_num, step_id)) {                
+                    if (SUCCESS != process_dirty_page(start + PAGE_SIZE*page_num, step_id)) {
                         return FAILURE;
                     }
                     dirty_found = 1;
@@ -301,7 +301,7 @@ int mem_process_region(ULONG start, ULONG end, ULONG step_id, int force) {
             case 2:
                 if (*cur & DIRTY_BIT) {
                     // found page with set soft-dirty bit
-                    if (SUCCESS != process_dirty_page(start + page_size*page_num, step_id)) {                
+                    if (SUCCESS != process_dirty_page(start + PAGE_SIZE*page_num, step_id)) {
                         return FAILURE;
                     }
                     dirty_found = 1;
@@ -312,7 +312,7 @@ int mem_process_region(ULONG start, ULONG end, ULONG step_id, int force) {
             case 1:
                 if (*cur & DIRTY_BIT) {
                     // found page with set soft-dirty bit
-                    if (SUCCESS != process_dirty_page(start + page_size*page_num, step_id)) {                
+                    if (SUCCESS != process_dirty_page(start + PAGE_SIZE*page_num, step_id)) {
                         return FAILURE;
                     }
                     dirty_found = 1;
@@ -326,7 +326,7 @@ int mem_process_region(ULONG start, ULONG end, ULONG step_id, int force) {
         for (ULONG page_num = 0; page_num < page_count; page_num++) {
             if (*cur & DIRTY_BIT) {
                 // found page with set soft-dirty bit
-                if (SUCCESS != process_dirty_page(start + page_size*page_num, step_id)) {                
+                if (SUCCESS != process_dirty_page(start + PAGE_SIZE * page_num, step_id)) {
                     return FAILURE;
                 }
                 dirty_found = 1;
@@ -431,7 +431,7 @@ const char *mem_current(uint64_t address, uint64_t size) {
 char *mapped_mem(uint64_t address) {
     for (struct region *cur = regions; cur; cur = cur->next) {
         if (cur->start <= address && cur->end > address) {
-            div_t res = div(address - cur->start, page_size);
+            div_t res = div(address - cur->start, PAGE_SIZE);
             return cur->pages[res.quot] + res.rem;
         }
     }
@@ -456,8 +456,8 @@ char *mapped_mem(uint64_t address) {
 int mem_read_regions(void) {
     static char exe_name[PATH_MAX];
 
+    char tmp[256];
     if (!*exe_name) {   // read executable name from /proc/<pid>/exe - executed once
-        char tmp[256];
         snprintf(tmp, sizeof(tmp), "/proc/%d/exe", pid);
         ssize_t res = readlink(tmp, exe_name, sizeof(exe_name) - 1);
         if (res < 0) {
@@ -467,7 +467,6 @@ int mem_read_regions(void) {
         exe_name[res] = '\0';
     }
 
-    char tmp[256];
     snprintf(tmp, sizeof(tmp), "/proc/%d/maps", pid);
     FILE *maps = fopen(tmp, "r");
     if (!maps) {
@@ -488,7 +487,7 @@ int mem_read_regions(void) {
             continue;
         }
         field = strtok_r(NULL, " \t", &state);
-        if (!field || 'r' != field[0] /* || 'x' == field[2] */) {     // skip memory without read permissions or executable
+        if (!field || 'r' != field[0]) {     // skip memory without read permissions
             continue;
         }
         int i = 2;  // two fields processed already
@@ -514,14 +513,14 @@ int mem_read_regions(void) {
 
                 if (cur->end > head && cur->start < tail) {
                     /* read and cached regions differ, but intersect - update cached region */
-                    int page_count = (tail - head) / page_size;
+                    int page_count = (tail - head) / PAGE_SIZE;
                     char **new_pages = malloc(page_count * sizeof(*new_pages));
                     int page_num = 0;
 
                     if (head < cur->start) {
                         DBG("Head grew");
                         /* region head grew - add new pages in front of cached ones */
-                        page_count = (cur->start - head) / page_size;
+                        page_count = (cur->start - head) / PAGE_SIZE;
                         char *pages;
                         /* it is important to use aligned momory as CPU instructions used by memdiff operates with aligned memory */
                         if (posix_memalign((void **)&pages, MEM_SEGMENT_SIZE, cur->start - head)) {
@@ -530,15 +529,15 @@ int mem_read_regions(void) {
                         }
                         memset(pages, 0, cur->start - head);
                         for (page_num = 0; page_num < page_count; page_num++) {
-                            new_pages[page_num] = pages + (page_num * page_size);
+                            new_pages[page_num] = pages + (page_num * PAGE_SIZE);
                         }
                     }
 
                     /* process intersection */
-                    page_count = (MIN(cur->end, tail) - MAX(cur->start, head)) / page_size;
+                    page_count = (MIN(cur->end, tail) - MAX(cur->start, head)) / PAGE_SIZE;
                     int page_offset = 0;
                     if (head > cur->start) {
-                        page_offset = (head - cur->start) / page_size;
+                        page_offset = (head - cur->start) / PAGE_SIZE;
                     }
                     for (int i = 0; i < page_count; i++) {
                         new_pages[page_num++] = cur->pages[i + page_offset];
@@ -548,7 +547,7 @@ int mem_read_regions(void) {
                     if (tail > cur->end) {
                         DBG("Tail grew");
                         /* region tail grew - add new pages behind cached ones */
-                        page_count = (tail - cur->end) / page_size;
+                        page_count = (tail - cur->end) / PAGE_SIZE;
                         char *pages;
                         /* it is important to use aligned momory as CPU instructions used by memdiff operates with aligned memory */
                         if (posix_memalign((void **)&pages, MEM_SEGMENT_SIZE, tail - cur->end)) {
@@ -557,7 +556,7 @@ int mem_read_regions(void) {
                         }
                         memset(pages, 0, cur->start - head);
                         for (int i = 0; i < page_count; i++) {
-                            new_pages[page_num++] = pages + (i * page_size);
+                            new_pages[page_num++] = pages + (i * PAGE_SIZE);
                         }
                     }
                     free(cur->pages);
@@ -582,7 +581,7 @@ int mem_read_regions(void) {
             }
             new_reg->start = head;
             new_reg->end = tail;
-            int page_count = (tail - head) / page_size;
+            int page_count = (tail - head) / PAGE_SIZE;
             new_reg->pages = malloc(page_count * sizeof(*new_reg->pages));
             if (!new_reg->pages) {
                 ERR("Out of memory");
@@ -597,7 +596,7 @@ int mem_read_regions(void) {
             }
             memset(pages, 0, new_reg->end - new_reg->start);
             for (int i = 0; i < page_count; i++) {
-                new_reg->pages[i] = pages + (i * page_size);
+                new_reg->pages[i] = pages + (i * PAGE_SIZE);
             }
             if (refresh) {
                 new_reg->next = cur;    // insert new region in front of current in cache
@@ -652,7 +651,7 @@ int mem_in_cache(uint64_t address, uint64_t size) {
  **************************************************************************/
 int process_dirty_page(ULONG start, ULONG step_id) {
     /* look through page segments, look for changed one */
-    uint64_t page_end = start + page_size;
+    uint64_t page_end = start + PAGE_SIZE;
     for (uint64_t addr = start; addr < page_end; addr += MEM_SEGMENT_SIZE) {
         const char *mem = mem_current(addr, MEM_SEGMENT_SIZE);
         if (!mem) {
@@ -671,6 +670,66 @@ int process_dirty_page(ULONG start, ULONG step_id) {
             ch_write(insert_mem_ch, (char *)msg, sizeof(*msg));    // channel reader will free msg
         }
     }
+
+    return SUCCESS;
+}
+
+
+/**************************************************************************
+ *
+ *  Function:   get_translation_offset
+ *
+ *  Params:     address - virtual address to translate
+ *              offset - where to store offset
+ *
+ *  Return:     SUCCESS / FAILURE
+ *
+ *  Descr:      Find offset for translation of virtual addr to physical one
+ *
+ **************************************************************************/
+int get_translation_offset(pid_t pid, uint64_t address, uint64_t *offset) {
+    char exe_name[PATH_MAX];
+    char tmp[256];
+
+    // read executable name from /proc/<pid>/exe
+    snprintf(tmp, sizeof(tmp), "/proc/%d/exe", pid);
+    ssize_t res = readlink(tmp, exe_name, sizeof(exe_name) - 1);
+    if (res < 0) {
+        ERR("Cannot get executable name from '%s': %s", tmp, strerror(errno));
+        return FAILURE;
+    }
+    exe_name[res] = '\0';
+
+    snprintf(tmp, sizeof(tmp), "/proc/%d/maps", pid);
+    FILE *maps = fopen(tmp, "r");
+    if (!maps) {
+        ERR("Cannot open file '%s': %s", tmp, strerror(errno));
+        return FAILURE;
+    }
+
+    while (fgets(tmp, sizeof(tmp), maps)) {
+        char *state, *field;
+        field = strtok_r(tmp, " \t", &state);
+        if (!field) {
+            continue;
+        }
+        field = strtok_r(NULL, " \t", &state);
+        if (!field || 'x' != field[2]) {     // skip memory without exec permissions
+            continue;
+        }
+        int i = 2;  // two fields processed already
+        while (i < 6 && NULL != (field = strtok_r(NULL, " \t\n", &state))) {
+            i++;
+        }
+        if (!strcmp(field, exe_name)) {
+            ULONG head, tail;
+            /* first field, already 0-terminated, has start and end address */
+            sscanf(tmp, "%" PRIx64 "-%" PRIx64, &head, &tail);
+            *offset = head - (address & PAGE_MASK);
+            break;
+       }
+    }
+    fclose(maps);
 
     return SUCCESS;
 }

@@ -89,7 +89,7 @@ struct channel *ch_create(void) {
  *  Return:     CHANNEL_OK / CHANNEL_FAIL
  *
  *  Descr:      Write to channel
- * 
+ *
  *  Note:       Message is not copied, it means that writer cannot destroy
  *              the message after calling ch_write(). It is responsibility
  *              of the reader to destroy message after use!
@@ -135,7 +135,7 @@ int ch_write(struct channel *ch, char *buf, size_t bufsize) {
  *  Return:     CHANNEL_OK / CHANNEL_FAIL / CHANNEL_END
  *
  *  Descr:      Read from channel
- * 
+ *
  *  Notes:      Reading blocks if there is nothing to read.
  *              Returns CHANNEL_END when get empty message.
  *              It is responsibility of the reader to destroy message after use
@@ -165,7 +165,7 @@ int ch_read(struct channel *ch, char **buf, size_t *bufsize) {
     if (0 != pthread_mutex_unlock(&ch->mutex)) {
         ERR("Cannot unlock the mutex: %s", strerror(errno));
         return CHANNEL_FAIL;
-    } 
+    }
 
     if (!*buf) {
         *bufsize = 0;

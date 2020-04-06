@@ -84,7 +84,7 @@ int init_comms(char *port) {
         ERR("Error binding socket - %s", strerror(errno));
         freeaddrinfo(result);
         return FAILURE;
-    }  
+    }
     freeaddrinfo(result);
 
     if (listen(listener, 1)) {

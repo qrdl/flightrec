@@ -163,7 +163,7 @@ int process_request(const JSON_OBJ *request, int fd) {
             ERR("Unsupported command '%s'", cmd_code);
             return FAILURE;
         }
-        
+
         DBG("Processing '%s' command", cmd_code);
         switch (cmd->code) {
             case cmd_init:

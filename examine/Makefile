@@ -49,6 +49,7 @@ cmd_hash.c: requests.h commands.gperf
 
 clean:
 	rm -f fr_examine $(OBJFILES) cmd_hash.c
+	$(MAKE) -C expressions clean
 
 depend: $(OBJFILES:.o=.c)
 	makedepend -Y. -I../dab -I.. -I. $^ 2>/dev/null

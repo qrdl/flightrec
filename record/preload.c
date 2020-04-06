@@ -192,7 +192,7 @@ static __attribute__((constructor)) void init(void) {
         write(2, &eol, 1);
         return;
     }
-    
+
     fifo_fd = open(fifo_name, O_WRONLY | O_NONBLOCK);
     if (fifo_fd < 0) {
         write(2, OPEN_ERROR_MSG, sizeof(OPEN_ERROR_MSG)-1);

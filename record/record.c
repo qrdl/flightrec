@@ -165,7 +165,7 @@ int main(int argc, char *argv[]) {
  *
  *  Params:     name - executable name
  *
- *  Return:     
+ *  Return:
  *
  *  Descr:      Print usage to stdout
  *

@@ -67,7 +67,7 @@ int (* best_memdiff(size_t size))(const char *, const char *, size_t) {
     }
 #endif
 
-    return  &memdiff8;        // last resort - use 8-byte comparison only   
+    return  &memdiff8;        // last resort - use 8-byte comparison only
 }
 
 
@@ -89,7 +89,7 @@ int (* best_memdiff(size_t size))(const char *, const char *, size_t) {
  *  Return:     1 (buffers differ) / 0 (buffers match)
  *
  *  Descr:      Compare memory using AVX512 CPU instructions
- * 
+ *
  *  Notes:      FIXME: Not tested as I have no access to Xeon CPUs
  *
  **************************************************************************/

@@ -139,7 +139,7 @@ int dbg_srcinfo(char *name) {
         ERR("Cannot alter DB structure");
         return FAILURE;
     }
- 
+
 cleanup:
     if (fd > 0) {
         close(fd);
@@ -1168,7 +1168,7 @@ int get_attrs(Dwarf_Debug dbg, Dwarf_Die die, struct die_attr *attr_list) {
     Dwarf_Half      form;
     Dwarf_Error     err = NULL;
     int             ret = SUCCESS;
- 
+
     for (i = 0; attr_list[i].attr_id; i++) {
         ret = dwarf_attr(die, attr_list[i].attr_id, &attrib, &err);
         if (DW_DLV_ERROR == ret) {

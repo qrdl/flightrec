@@ -660,7 +660,7 @@ cleanup:
  *  Return:     SUCCESS / FAILURE
  *
  *  Descr:      Process IDE's 'stepBack' request, send 'stopped' event
- * 
+ *
  *  Note:       StepBack jumps over function calls like 'next', but in
  *              reverse direction
  *
@@ -756,7 +756,7 @@ int process_breakpoints(const JSON_OBJ *request, int fd) {
         ERR(error);
         RETCLEAN(FAILURE);
     }
-    
+
     const char *fname = JSON_GET_STRING_FIELD(JSON_GET_OBJ(args, "source"), "name");
     if (JSON_OK != json_err) {
         error = "Cannot get 'source/name' param in 'setBreakpoints' request";
@@ -844,7 +844,7 @@ int process_breakpoints(const JSON_OBJ *request, int fd) {
             RETCLEAN(FAILURE);
         }
         item = JSON_ADD_NEW_ITEM(out_br);
-        if (!DAB_AFFECTED_ROWS) {   
+        if (!DAB_AFFECTED_ROWS) {
             // file and line don't correspond to stoppable location - breakpoint not verified
             JSON_NEW_FALSE_FIELD(item, "verified");
         } else {
@@ -1217,7 +1217,7 @@ int process_variables(const JSON_OBJ *request, int fd) {
         }
     } else {        // reference is variable/item/field
         const char *filter = JSON_GET_STRING_FIELD(req, "filter");
-        
+
         if (JSON_OK == json_err && !strcmp(filter, "indexed")) {
             /* add array items */
             unsigned int start = JSON_GET_INT32_FIELD(req, "start");
@@ -1389,7 +1389,7 @@ cleanup:
  *  Descr:      Add common reponse fields
  *
  **************************************************************************/
-const char *build_response(const JSON_OBJ *request, JSON_OBJ *response, int status, const char *message) {   
+const char *build_response(const JSON_OBJ *request, JSON_OBJ *response, int status, const char *message) {
     JSON_NEW_STRING_FIELD(response, "type", "response");
 
     // copy command and sequence from request

@@ -164,7 +164,7 @@ int add_var(ULONG scope, JSON_OBJ *container, ULONG var_id, ULONG step) {
  *
  *  Return:     SUCCESS / FAILURE
  *
- *  Descr:      Get variable address for specified step, and other details 
+ *  Descr:      Get variable address for specified step, and other details
  *
  **************************************************************************/
 int get_var_address(uint64_t var_id, uint64_t step, char **name, uint64_t *address, uint64_t *type_offset) {
