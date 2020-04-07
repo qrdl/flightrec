@@ -61,6 +61,7 @@ int mem_next_region(uint64_t *start, uint64_t *end);
 int mem_process_region(uint64_t start, uint64_t end, uint64_t step_id, int force);
 int mem_in_cache(uint64_t address, uint64_t size);
 int mem_reset_dirty(void);
+int get_translation_offset(pid_t p, uint64_t address, uint64_t *offset);
 
 /* function returns pointer to function with fastest implementation based on instruction set and buffer size */
 int (* best_memdiff(size_t count))(const char *, const char *, size_t);

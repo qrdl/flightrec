@@ -73,7 +73,7 @@ void *wrk_insert_step(void *arg) {
     }
 
     struct insert_step_msg *msg;
-    size_t size = sizeof(*msg);     // specify expected payload size 
+    size_t size = sizeof(*msg);     // specify expected payload size
     if (DAB_OK != DAB_BEGIN) {
         return NULL;
     }
@@ -169,7 +169,7 @@ void *wrk_insert_heap(void *arg) {
     }
 
     struct insert_heap_msg *msg;
-    size_t size = sizeof(*msg);     // specify expected payload size 
+    size_t size = sizeof(*msg);     // specify expected payload size
     if (DAB_OK != DAB_BEGIN) {
         return NULL;
     }
@@ -273,14 +273,14 @@ void *wrk_insert_mem(void *arg) {
     }
 
     struct insert_mem_msg *msg;
-    size_t size = sizeof(*msg);     // specify expected payload size 
+    size_t size = sizeof(*msg);     // specify expected payload size
     if (DAB_OK != DAB_BEGIN) {
         return NULL;
     }
     struct sr content;
     while (CHANNEL_OK == ch_read(ch, (char **)&msg, &size)) {
         DAB_CURSOR_RESET(insert);
-        /* manualy assemble Stingray string to be used as BLOB */       
+        /* manualy assemble Stingray string to be used as BLOB */
         content.val = msg->content;
         content.size = content.len = sizeof(msg->content);
 

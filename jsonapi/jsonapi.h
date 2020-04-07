@@ -220,7 +220,7 @@
                                             if (!ret) \
                                                 json_err = JSON_ERR_NOTFOUND; \
                                             ret; \
-                                        })                                    
+                                        })
 #define JSON_GET_STRING_ITEM(O,I)       ({ \
                                             const char *ret = NULL; \
                                             json_err = JSON_OK; \
@@ -232,7 +232,7 @@
                                             else \
                                                 ret = json_object_get_string(tmp); \
                                             ret; \
-                                        })                                
+                                        })
 #define JSON_GET_INT32_ITEM(O,I)        ({ \
                                             int32_t ret = 0; \
                                             json_err = JSON_OK; \

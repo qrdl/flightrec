@@ -1,5 +1,8 @@
 # Flight recorder
 
+![CI/CD](https://github.com/qrdl/flightrec/workflows/CI/CD/badge.svg?branch=master)
+[![Language grade: C/C++](https://img.shields.io/lgtm/grade/cpp/g/qrdl/flightrec.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/qrdl/flightrec/context:cpp)
+
 ## Description
 Flight Recorder (Flightrec for short) allows to record client program execution and examine it later. It consists of three building blocks:
 * Record - the part that records program execution and stores all steps, registers and memory changes

@@ -81,4 +81,3 @@ case "Stack trace" {
         expect /body/stackFrames[0]/source/sourceReference == 0
     }
 }
-

@@ -316,6 +316,7 @@ union node_value evaluate_node(struct ast_node *ast, uint64_t step, int flags, c
                     return (union node_value){ .unsigned_value =
                                     !evaluate_node(ast->left, step, NO_FLAGS, error).unsigned_value };
             }
+	    break;	// not really needed, just to silence the warning
         case NODE_TYPE_BINARY_OP:
             if (ast->left->indirect) {
                 if (    !(OP_ADD == ast->op_code && TKIND_SIGNED == ast->right->type_kind) &&
@@ -424,7 +425,7 @@ union node_value evaluate_node(struct ast_node *ast, uint64_t step, int flags, c
                         return (union node_value){ .signed_value = (int64_t)value.float_value };
                     }
                     return value;
-                case TKIND_FLOAT:                    
+                case TKIND_FLOAT:
                     if (TKIND_UNSIGNED == ast->operand->type_kind) {
                         return (union node_value){ .float_value = (double)value.unsigned_value };
                     } else if (TKIND_SIGNED == ast->operand->type_kind) {
@@ -883,7 +884,7 @@ int get_type_details(const char *name, uint64_t *offset, int *kind, size_t *size
  *  Return:     SUCCESS / FAILURE
  *
  *  Descr:      Find details for given variable (within given scope)
- * 
+ *
  *  Note:       Return info about basic type of the variable, e.g. if
  *              variable is a pointer, return the type it points to
  *
@@ -948,7 +949,7 @@ int get_var_details(const char *name, uint64_t scope, uint64_t *var_id,
  *  Return:     SUCCESS / FAILURE
  *
  *  Descr:      Find details for given field (within given struct)
- * 
+ *
  *  Note:       Return info about basic type of the field, e.g. if
  *              field is a pointer, return the type it points to
  *
@@ -1009,7 +1010,7 @@ int get_field_details(const char *name, uint64_t type, uint64_t *type_offset,
  *  Return:     SUCCESS / FAILURE
  *
  *  Descr:      Find details for base type (typically used for arrays)
- * 
+ *
  *  Note:       Return info about the most base type of the type
  *
  **************************************************************************/
@@ -1063,7 +1064,7 @@ int get_base_type_details(uint64_t offset, uint64_t *type_offset, int *kind, siz
  *  Return:     SUCCESS / FAILURE
  *
  *  Descr:      Return expression ID by text
- * 
+ *
  *  Note:       If expression is cached, also return the associated AST
  *
  **************************************************************************/
@@ -1144,7 +1145,7 @@ int query_expr_cache(const char *expr_text, uint64_t *id, struct ast_node **ast)
  *  Return:     SUCCESS / FAILURE
  *
  *  Descr:      Return expression ID by text
- * 
+ *
  *  Note:       If expression is cached, also return the associated AST
  *
  **************************************************************************/

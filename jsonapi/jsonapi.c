@@ -40,7 +40,7 @@ const char *json_strerror(int err) {
     if (err < JSON_ERR_MIN || err > JSON_ERR_MAX) {
         return NULL;
     }
-    
+
     return messages[err];
 }
 

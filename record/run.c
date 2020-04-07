@@ -76,6 +76,7 @@ int fifo_fd = 0;
 static struct channel *insert_step_ch;
 static struct channel *insert_heap_ch;
 struct channel *insert_mem_ch;          // not static because is used in mem.c
+static uint64_t exepage_offset;        // offset used for virtual -> physical address translation
 
 
 /**************************************************************************
@@ -223,12 +224,27 @@ int set_breakpoints(pid_t pid) {
     ULONG rowid;
     while (DAB_OK == (db_stat = DAB_CURSOR_FETCH(cursor, &address, &rowid))) {
         /* read one byte at specified address, remember it and replace with INT 3 instruction to cause TRAP */
-        errno = 0;  // PTRACE_PEEKDATA can return anything, even -1, so use only errno for diag
-        REG_TYPE instr = ptrace(PTRACE_PEEKDATA, pid, (void *)address, NULL);
-        if (errno) {
-            ERR("Cannot peek at child code - %s", strerror(errno));
-            RETCLEAN(FAILURE);
-        }
+        REG_TYPE instr;
+        do {
+            errno = 0;  // PTRACE_PEEKDATA can return anything, even -1, so use only errno for diag
+            instr = ptrace(PTRACE_PEEKDATA, pid, (void *)(address+exepage_offset), NULL);
+            if (errno) {
+                if (EIO == errno && !exepage_offset) {
+                    /* may fail because address needs to be translated - find the offset */
+                    if (SUCCESS != get_translation_offset(pid, address, &exepage_offset)) {
+                        RETCLEAN(FAILURE);
+                    }
+                    continue;   // repeat the attempt with non-zero exepage_offset
+                }
+		if (!exepage_offset) {
+		    ERR("Offset is zero");
+		    RETCLEAN(FAILURE);
+		}
+                ERR("Cannot peek at child code - %s", strerror(errno));
+                RETCLEAN(FAILURE);
+            }
+	    break;
+        } while (1);
         /* store original instruction in DB */
         if (!update_cursor) {
             if (DAB_OK != DAB_CURSOR_OPEN(&update_cursor,
@@ -252,7 +268,7 @@ int set_breakpoints(pid_t pid) {
         }
         /* update child code */
         instr = (instr & ~0xFF) | int3;
-        if (-1 == ptrace(PTRACE_POKEDATA, pid, (void *)address, (void *)instr)) {
+        if (-1 == ptrace(PTRACE_POKEDATA, pid, (void *)(address+exepage_offset), (void *)instr)) {
             ERR("Cannot update child code - %s", strerror(errno));
             RETCLEAN(FAILURE);
         }
@@ -301,12 +317,12 @@ int process_breakpoint(pid_t pid) {
         exit(EXIT_FAILURE);
     }
 
-    REG_TYPE pc = IP(regs)-1;       // program counter at breakpoint, before it processed the TRAP
+    REG_TYPE pc = IP(regs) - 1;       // program counter at breakpoint, before it processed the TRAP
     ULONG fid, line;
     int saved;
 
     DAB_CURSOR_RESET(select_line);
-    if (DAB_OK != DAB_CURSOR_BIND(select_line, pc)) {
+    if (DAB_OK != DAB_CURSOR_BIND(select_line, pc - exepage_offset)) {
         return FAILURE;
     }
 
@@ -316,7 +332,7 @@ int process_breakpoint(pid_t pid) {
 
     if (func_id != old_func_id) {
         if (FUNC_FLAG_START == func_flag) {
-            depth++;        // got to the begining of the function - new function call            
+            depth++;        // got to the begining of the function - new function call
         }
         // depth for FUNC_FLAG_END will be decremented after processing the step
         // if not function call, we can get here as a result of return from function call or long jump
@@ -409,7 +425,7 @@ int process_breakpoint(pid_t pid) {
     int wait_status;
     waitpid(pid, &wait_status, 0);      // wait for SIGTRAP from child, indicating the breakpoint
     if (!WIFSTOPPED(wait_status) || !(WSTOPSIG(wait_status) == SIGTRAP)) {
-        ERR("Didn't get expected SIGTRAP");
+        ERR("Didn't get expected SIGTRAP - got %d", WSTOPSIG(wait_status));
         return FAILURE;
     }
 

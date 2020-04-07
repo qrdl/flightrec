@@ -315,7 +315,7 @@ int dab_cursor_prepare(const char *file, int line, void **stmt, const char *stmt
  *
  *  Function:   dab_last_id
  *
- *  Params:     
+ *  Params:
  *
  *  Return:     rowid of last inserted record / 0 on error
  *
@@ -343,7 +343,7 @@ ULONG dab_last_id(const char *file, int line) {
  *
  *  Function:   dab_affected_rows
  *
- *  Params:     
+ *  Params:
  *
  *  Return:     number of rows
  *
