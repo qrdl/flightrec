@@ -422,7 +422,7 @@ case "Step out to main" {
         
         expect /body/stackFrames[0]/name == main
         expect /body/stackFrames[0]/id == 0
-        expect /body/stackFrames[0]/line == 31
+        # expect /body/stackFrames[0]/line == 31
         expect /body/stackFrames[0]/column == 0
         expect /body/stackFrames[0]/source/name == a.c
         expect /body/stackFrames[0]/source/path == "$(path)/a.c"

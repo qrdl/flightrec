@@ -316,7 +316,7 @@ union node_value evaluate_node(struct ast_node *ast, uint64_t step, int flags, c
                     return (union node_value){ .unsigned_value =
                                     !evaluate_node(ast->left, step, NO_FLAGS, error).unsigned_value };
             }
-            break;  /* should never get here */
+	    break;	// not really needed, just to silence the warning
         case NODE_TYPE_BINARY_OP:
             if (ast->left->indirect) {
                 if (    !(OP_ADD == ast->op_code && TKIND_SIGNED == ast->right->type_kind) &&

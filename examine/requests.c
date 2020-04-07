@@ -454,16 +454,17 @@ int process_next(const JSON_OBJ *request, int fd) {
                     "f.id = s.file_id "
             "WHERE "
                 "s.id > ? AND "
-                "s.depth <= ?"
+                "s.depth <= ? AND "
+		"NOT (f.name = ? AND s.line = ?) "
             "ORDER BY "
                 "s.id "
             "LIMIT 1",
-            cur_step, cur_depth
+            cur_step, cur_depth, cur_file, cur_line
         )) {
             error = "Cannot prepare statement";
             RETCLEAN(FAILURE);
         }
-    } else if (DAB_OK != DAB_CURSOR_RESET(next_cursor) || DAB_OK != DAB_CURSOR_BIND(next_cursor, cur_step, cur_depth)) {
+    } else if (DAB_OK != DAB_CURSOR_RESET(next_cursor) || DAB_OK != DAB_CURSOR_BIND(next_cursor, cur_step, cur_depth, cur_file, cur_line)) {
         error = "Cannot query next step";
         RETCLEAN(FAILURE);
     }
@@ -690,16 +691,17 @@ int process_stepback(const JSON_OBJ *request, int fd) {
                     "f.id = s.file_id "
             "WHERE "
                 "s.id < ? AND "
-                "s.depth <= ?"
+                "s.depth <= ? AND "
+		"NOT (f.name = ? AND s.line = ?) "
             "ORDER BY "
                 "s.id DESC "
             "LIMIT 1",
-            cur_step, cur_depth
+            cur_step, cur_depth, cur_file, cur_line
         )) {
             error = "Cannot prepare statement";
             RETCLEAN(FAILURE);
         }
-    } else if (DAB_OK != DAB_CURSOR_RESET(stepback_cursor) || DAB_OK != DAB_CURSOR_BIND(stepback_cursor, cur_step, cur_depth)) {
+    } else if (DAB_OK != DAB_CURSOR_RESET(stepback_cursor) || DAB_OK != DAB_CURSOR_BIND(stepback_cursor, cur_step, cur_depth, cur_file, cur_line)) {
         error = "Cannot query next step";
         RETCLEAN(FAILURE);
     }
