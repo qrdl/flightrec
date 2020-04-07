@@ -69,7 +69,9 @@ static struct region *regions, *cur_region;
 static FILE *pagemap = NULL;
 static pid_t pid;
 static char *clear_refs_filename;
+#ifdef __AVX__
 static int avx_supported = 0;
+#endif
 
 int (* memdiff)(const char *buf1, const char *buf2, size_t count);
 
@@ -687,12 +689,12 @@ int process_dirty_page(ULONG start, ULONG step_id) {
  *  Descr:      Find offset for translation of virtual addr to physical one
  *
  **************************************************************************/
-int get_translation_offset(pid_t pid, uint64_t address, uint64_t *offset) {
+int get_translation_offset(pid_t p, uint64_t address, uint64_t *offset) {
     char exe_name[PATH_MAX];
     char tmp[256];
 
     // read executable name from /proc/<pid>/exe
-    snprintf(tmp, sizeof(tmp), "/proc/%d/exe", pid);
+    snprintf(tmp, sizeof(tmp), "/proc/%d/exe", p);
     ssize_t res = readlink(tmp, exe_name, sizeof(exe_name) - 1);
     if (res < 0) {
         ERR("Cannot get executable name from '%s': %s", tmp, strerror(errno));
@@ -700,7 +702,7 @@ int get_translation_offset(pid_t pid, uint64_t address, uint64_t *offset) {
     }
     exe_name[res] = '\0';
 
-    snprintf(tmp, sizeof(tmp), "/proc/%d/maps", pid);
+    snprintf(tmp, sizeof(tmp), "/proc/%d/maps", p);
     FILE *maps = fopen(tmp, "r");
     if (!maps) {
         ERR("Cannot open file '%s': %s", tmp, strerror(errno));
