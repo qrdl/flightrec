@@ -3,7 +3,7 @@
 ## Description
 Flight Recorder (Flightrec for short) allows to record client program execution and examine it later. It consists of three building blocks:
 * Record - the part that records program execution and stores all steps, registers and memory changes
-* Examine - debug server, it allows to access logged data using DAB protocol
+* Examine - debug server, it allows to access logged data using DAP protocol
 * VS Code extension - debugging extension for VS Code that communicates with Examine
 
 ## Features
@@ -29,9 +29,6 @@ Flightrec supports only ELF client binaries with DWARF2 debug information. There
 With high optimisation settings GCC may create complex locations for variables, such as "first 8 bytes in register, reminder in memory at certain address", and it is not supported by Flightrec yet.
 Therefore is recommended to compile client without optimisation.
 
-### Features
-Flightrec is "work in progress" and there are some features missing, such as expression evaluation. Because of this watching the variable and conditional breakpoints are not supported yet.
-
 ### Memory management
 Flightrec intercepts calls to `malloc`/`free` family of functions in order to monitor memory changes, therefore if client uses its own memory management by directly doing syscalls, Flightrec is unable to detect it.
 
@@ -41,12 +38,16 @@ Although Flightrec is multi-threaded application, it doesn't support multi-threa
 ## Pre-requisites
 
 ### Record and Examine
-To build Flightrec make sure you have [GNU gperf](https://www.gnu.org/software/gperf/), which is usually available as _gperf_ package.
-Also following libraries are required (with Ubuntu package names):
+To build Flightrec make sure you have:
+* [GNU gperf](https://www.gnu.org/software/gperf/) (Linux package name _gperf_)
+* [Flex](https://github.com/westes/flex) (Linux package name _flex_)
+* [GNU Bison](https://www.gnu.org/software/bison/) (Linux package name _bison_)
+
+Also following libraries are required (with Ubuntu package names, other distributions may use different names):
 * libelf (`libelf-dev`)
 * libdwarf (`libdwarf-dev`)
 * sqlite3 (`libsqlite3-dev`)
-* json-c (`libjson-c-dev`) version 1.13 or above
+* json-c (`libjson-c-dev`) version 1.13 or above (versions below 1.13 aren't compatible with Flightrec)
 
 ### VSCode extension
 To package VSCode extension you need to have [Node.js](https://nodejs.org/) installed, with [vsce](https://github.com/microsoft/vscode-vsce).
@@ -70,7 +71,7 @@ Run `fr_record [<options>] -- <client> [<client options>]` to record the run. As
 
 Run under Recorder is much slower than regular run, therefore it is recommended to limit the number of recorded steps. To do it some translation units can be excluded from analysis, as a result user won't be able to step inside the calls for functions, located in these units. For example if program is directly linked with SQlite3 (not as external library), it can be excluded with `-x sqlite3.c` option. `-x` option specifies units to exclude (blacklist), while `-i` option specifies units in to include (whitelist). If whitelist is specified, blacklist is ignored. Both `-x` and `-i` options can occur several times.
 
-Units, compiled without debug information, as excluded from analysis automatically, so it also can be used as a mean to exclude some units.
+Units, compiled without debug information, excluded from analysis automatically.
 
 By default Flightrec processes only source files that are located in and under current directory, however it is possible to specify alternative path for sources with `-p` option.
 

@@ -33,4 +33,3 @@ tester_func.o: tester_func.c tester.h
 
 clean:
 	rm -f test test.fr* test.dump $(OBJFILES) test.log tester lex.yy.c y.tab.c lex.yy.o y.tab.o y.tab.h tester_func.o
-

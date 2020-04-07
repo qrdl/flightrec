@@ -244,7 +244,7 @@
                                             else \
                                                 ret = json_object_get_int(tmp); \
                                             ret; \
-                                        })
+                                        })                                    
 #define JSON_GET_INT64_ITEM(O,I)        ({ \
                                             int64_t ret = 0; \
                                             json_err = JSON_OK; \
@@ -256,7 +256,7 @@
                                             else \
                                                 ret = json_object_get_int64(tmp); \
                                             ret; \
-                                        })
+                                        })                                    
 #define JSON_GET_DBL_ITEM(O,I)          ({ \
                                             double ret = 0; \
                                             json_err = JSON_OK; \
@@ -280,7 +280,7 @@
                                             else \
                                                 ret = json_object_get_boolean(tmp); \
                                             ret; \
-                                        })
+                                        })                                
 
 /***** Add object field *****/
 #define JSON_NEW_INT32_FIELD(O,K,F)     ({ \
