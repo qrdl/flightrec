@@ -157,7 +157,7 @@ int memdiff32(const char *buf1, const char *buf2, size_t size) {
  **************************************************************************/
 int memdiff16(const char *buf1, const char *buf2, size_t size) {
     while (size >= 16) {
-        if (! _mm_movemask_epi8(_mm_cmpeq_epi8(_mm_load_si128((__m128i const *)buf1), _mm_load_si128((__m128i const *)buf2)))) {
+        if (0xFFFF != _mm_movemask_epi8(_mm_cmpeq_epi8(_mm_load_si128((__m128i const *)buf1), _mm_load_si128((__m128i const *)buf2)))) {
             return 1;
         }
         STEP(16);
