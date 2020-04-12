@@ -123,7 +123,6 @@ int main(int argc, char *argv[]) {
             int ret = process_request(request, write_fd);
             JSON_RELEASE(request);
             if (SUCCESS != ret) {
-                ERR("Cannot process incoming command");
                 break;  // close the connection
             }
         }
@@ -212,6 +211,9 @@ int process_request(const JSON_OBJ *request, int fd) {
             case cmd_config_done:
                 just_ack(request, fd);
                 break;
+            case cmd_disconnect:
+                just_ack(request, fd);
+                return FAILURE;         // to cause caller to reset everything
             default:    // should never happen as all supported commands must have cases,
                         // and unsupported ones should fail at identify()
                 return FAILURE;

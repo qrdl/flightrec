@@ -236,7 +236,7 @@ int proc_unit(Dwarf_Debug dbg) {
     }
 
     INFO("Processing unit %s", name);
-    if (DAB_OK != DAB_EXEC("BEGIN")) {
+    if (DAB_OK != DAB_BEGIN) {
         RETCLEAN(FAILURE);
     } else {
         in_txn = 1;
@@ -265,7 +265,7 @@ int proc_unit(Dwarf_Debug dbg) {
         RETCLEAN(ret);
     }
 
-    if (DAB_OK != DAB_EXEC("COMMIT")) {
+    if (DAB_OK != DAB_COMMIT) {
         RETCLEAN(FAILURE);
     } else {
         ret = SUCCESS;
@@ -273,7 +273,7 @@ int proc_unit(Dwarf_Debug dbg) {
 
 cleanup:
     if (SUCCESS != ret && in_txn) {
-        DAB_EXEC("ROLLBACK");
+        DAB_ROLLBACK;
     }
     cleanup_attrs(dbg, attr_list);
     if (cu_die) {

@@ -47,7 +47,7 @@ fr_preload.so: preload.c
 
 memdiff.o: memdiff.c
 # explicitly allow support for AVX512. Actual decision re using AVX512 or AVX2 or SSE2 is made at runtime
-	$(CC) $(CFLAGS) -c memdiff.c -o $@
+	$(CC) $(CFLAGS) -march=native -c memdiff.c -o $@
 
 mem.o: mem.c
 # explicitly allow support for AVX. Actual decision re using AVX is made at runtime

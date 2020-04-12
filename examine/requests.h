@@ -48,7 +48,7 @@ enum commands {
     cmd_revcontinue,
     cmd_variables,
     cmd_disconnect,
-    cmd_evaluate
+    cmd_evaluate,
 };
 
 int process_init(const JSON_OBJ *request, int fd);
