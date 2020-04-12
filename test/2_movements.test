@@ -484,7 +484,7 @@ case "Continue (to end)" {
         
         expect /body/stackFrames[0]/name == main
         expect /body/stackFrames[0]/id == 0
-        expect /body/stackFrames[0]/line == 54
+        expect /body/stackFrames[0]/line == 58
         expect /body/stackFrames[0]/column == 0
         expect /body/stackFrames[0]/source/name == a.c
         expect /body/stackFrames[0]/source/path == "$(path)/a.c"

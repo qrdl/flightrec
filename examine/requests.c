@@ -873,7 +873,7 @@ int process_breakpoints(const JSON_OBJ *request, int fd) {
             "SELECT "
                 " file_id, line "
             "FROM "
-                "main.statement "
+                "main.step "
             "WHERE "
                 "file_id = ? AND "
                 "line = ? "

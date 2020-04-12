@@ -50,6 +50,10 @@ int main(void) {
     free(zzz);
     i = 20;
 
-    return a();
+    int ret = a();
+    if (ret > 0) {
+        ret = 10;
+    }
+    return ret;
 }
 

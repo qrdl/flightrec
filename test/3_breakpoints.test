@@ -1,0 +1,453 @@
+# Caller must set $(path)
+start "../examine/fr_examine"
+
+case "Init" {
+    request '{"command":"initialize","arguments":{"clientID":"tester","clientName":"Tester"},"type":"request","seq":1}'
+    # response
+    response {
+        # ignore init response
+    }
+    response {
+        # ignore init done event
+    }
+    request '{"command":"launch","arguments":{"request":"launch","program":"$(path)/test","sourcePath":"$(path)","stopOnEntry":true,},"type":"request","seq":2}'
+    # response
+    response {
+        expect /type == "response"
+        expect /command == launch
+        expect /request_seq == 2
+        expect /success == true
+    }
+    response {
+        # ignore stopped event
+    }
+}
+
+case "Set five breakpoints in first file (2 unreachable)" {
+    request '{"command":"setBreakpoints","arguments":{"source":{"name":"a.c","path":"$(path)/a.c"},"lines":[34,40,42,50,55],"breakpoints":[{"line":34},{"line":40},{"line":42},{"line":50},{"line":55}],"sourceModified":false},"type":"request","seq":3}'
+    response {
+        expect /type == "response"
+        expect /command == setBreakpoints
+        expect /request_seq == 3
+        expect /success == true
+
+        expect /body/breakpoints[0]/id == 1
+        expect /body/breakpoints[0]/verified == true
+        expect /body/breakpoints[1]/id == 2
+        expect /body/breakpoints[1]/verified == true
+        # breakpoint on comment is not verified
+        expect /body/breakpoints[2]/verified == false
+        expect /body/breakpoints[3]/id == 3
+        expect /body/breakpoints[3]/verified == true
+        # breakpoint of line which is never executed is not verified
+        expect /body/breakpoints[4]/verified == false
+    }
+}
+
+case "Set one breakpoint in second file" {
+    request '{"command":"setBreakpoints","arguments":{"source":{"name":"b.c","path":"$(path)/b.c"},"lines":[2],"breakpoints":[{"line":2}],"sourceModified":false},"type":"request","seq":4}'
+    response {
+        expect /type == "response"
+        expect /command == setBreakpoints
+        expect /request_seq == 4
+        expect /success == true
+
+        expect /body/breakpoints[0]/id == 4
+        expect /body/breakpoints[0]/verified == true
+    }
+}
+
+case "Hit first breakpoint" {
+    request '{"command":"continue","arguments":{"threadId":1},"type":"request","seq":5}'
+    response {
+        expect /type == "response"
+        expect /command == continue
+        expect /request_seq == 5
+        expect /success == true
+    }
+    response {
+        expect /type == event
+        expect /event == stopped
+        expect /body/reason == breakpoint
+    }
+    request '{"command":"stackTrace","arguments":{"threadId":1,"startFrame":0,"levels":20},"type":"request","seq":6}'
+    response {
+        expect /type == "response"
+        expect /command == stackTrace
+        expect /request_seq == 6
+        expect /success == true
+        expect /body/totalFrames == 1
+
+        expect /body/stackFrames[0]/name == main
+        expect /body/stackFrames[0]/id == 0
+        expect /body/stackFrames[0]/line == 34
+        expect /body/stackFrames[0]/column == 0
+        expect /body/stackFrames[0]/source/name == a.c
+        expect /body/stackFrames[0]/source/path == "$(path)/a.c"
+        expect /body/stackFrames[0]/source/sourceReference == 0
+    }
+}
+
+case "Hit breakpoint inside loop" {
+    request '{"command":"continue","arguments":{"threadId":1},"type":"request","seq":7}'
+    response {
+        expect /type == "response"
+        expect /command == continue
+        expect /request_seq == 7
+        expect /success == true
+    }
+    response {
+        expect /type == event
+        expect /event == stopped
+        expect /body/reason == breakpoint
+    }
+    request '{"command":"stackTrace","arguments":{"threadId":1,"startFrame":0,"levels":20},"type":"request","seq":8}'
+    response {
+        expect /type == "response"
+        expect /command == stackTrace
+        expect /request_seq == 8
+        expect /success == true
+        expect /body/totalFrames == 1
+
+        expect /body/stackFrames[0]/name == main
+        expect /body/stackFrames[0]/id == 0
+        expect /body/stackFrames[0]/line == 40
+        expect /body/stackFrames[0]/column == 0
+        expect /body/stackFrames[0]/source/name == a.c
+        expect /body/stackFrames[0]/source/path == "$(path)/a.c"
+        expect /body/stackFrames[0]/source/sourceReference == 0
+    }
+}
+
+case "Back to first breakpoint" {
+    request '{"command":"reverseContinue","arguments":{"threadId":1},"type":"request","seq":9}'
+    response {
+        expect /type == "response"
+        expect /command == reverseContinue
+        expect /request_seq == 9
+        expect /success == true
+    }
+    response {
+        expect /type == event
+        expect /event == stopped
+        expect /body/reason == breakpoint
+    }
+    request '{"command":"stackTrace","arguments":{"threadId":1,"startFrame":0,"levels":20},"type":"request","seq":10}'
+    response {
+        expect /type == "response"
+        expect /command == stackTrace
+        expect /request_seq == 10
+        expect /success == true
+        expect /body/totalFrames == 1
+
+        expect /body/stackFrames[0]/name == main
+        expect /body/stackFrames[0]/id == 0
+        expect /body/stackFrames[0]/line == 34
+        expect /body/stackFrames[0]/column == 0
+        expect /body/stackFrames[0]/source/name == a.c
+        expect /body/stackFrames[0]/source/path == "$(path)/a.c"
+        expect /body/stackFrames[0]/source/sourceReference == 0
+    }
+}
+
+case "Again breakpoint inside loop" {
+    request '{"command":"continue","arguments":{"threadId":1},"type":"request","seq":11}'
+    response {
+        expect /type == "response"
+        expect /command == continue
+        expect /request_seq == 11
+        expect /success == true
+    }
+    response {
+        expect /type == event
+        expect /event == stopped
+        expect /body/reason == breakpoint
+    }
+    request '{"command":"stackTrace","arguments":{"threadId":1,"startFrame":0,"levels":20},"type":"request","seq":12}'
+    response {
+        expect /type == "response"
+        expect /command == stackTrace
+        expect /request_seq == 12
+        expect /success == true
+        expect /body/totalFrames == 1
+
+        expect /body/stackFrames[0]/name == main
+        expect /body/stackFrames[0]/id == 0
+        expect /body/stackFrames[0]/line == 40
+        expect /body/stackFrames[0]/column == 0
+        expect /body/stackFrames[0]/source/name == a.c
+        expect /body/stackFrames[0]/source/path == "$(path)/a.c"
+        expect /body/stackFrames[0]/source/sourceReference == 0
+    }
+}
+
+case "Hit breakpoint in different file" {
+    request '{"command":"continue","arguments":{"threadId":1},"type":"request","seq":13}'
+    response {
+        expect /type == "response"
+        expect /command == continue
+        expect /request_seq == 13
+        expect /success == true
+    }
+    response {
+        expect /type == event
+        expect /event == stopped
+        expect /body/reason == breakpoint
+    }
+    request '{"command":"stackTrace","arguments":{"threadId":1,"startFrame":0,"levels":20},"type":"request","seq":14}'
+    response {
+        expect /type == "response"
+        expect /command == stackTrace
+        expect /request_seq == 14
+        expect /success == true
+        expect /body/totalFrames == 3
+
+        expect /body/stackFrames[0]/name == baz
+        expect /body/stackFrames[0]/id == 0
+        expect /body/stackFrames[0]/line == 2
+        expect /body/stackFrames[0]/column == 0
+        expect /body/stackFrames[0]/source/name == b.c
+        expect /body/stackFrames[0]/source/path == "$(path)/b.c"
+        expect /body/stackFrames[0]/source/sourceReference == 0
+
+        expect /body/stackFrames[1]/name == foo
+        expect /body/stackFrames[1]/id == 1
+        expect /body/stackFrames[1]/line == 9
+        expect /body/stackFrames[1]/column == 0
+        expect /body/stackFrames[1]/source/name == b.c
+        expect /body/stackFrames[1]/source/path == "$(path)/b.c"
+        expect /body/stackFrames[1]/source/sourceReference == 0
+
+        expect /body/stackFrames[2]/name == main
+        expect /body/stackFrames[2]/id == 2
+        expect /body/stackFrames[2]/line == 45
+        expect /body/stackFrames[2]/column == 0
+        expect /body/stackFrames[2]/source/name == a.c
+        expect /body/stackFrames[2]/source/path == "$(path)/a.c"
+        expect /body/stackFrames[2]/source/sourceReference == 0
+    }
+}
+
+case "Hit same breakpoint second time" {
+    request '{"command":"continue","arguments":{"threadId":1},"type":"request","seq":15}'
+    response {
+        expect /type == "response"
+        expect /command == continue
+        expect /request_seq == 15
+        expect /success == true
+    }
+    response {
+        expect /type == event
+        expect /event == stopped
+        expect /body/reason == breakpoint
+    }
+    request '{"command":"stackTrace","arguments":{"threadId":1,"startFrame":0,"levels":20},"type":"request","seq":16}'
+    response {
+        expect /type == "response"
+        expect /command == stackTrace
+        expect /request_seq == 16
+        expect /success == true
+        expect /body/totalFrames == 3
+
+        expect /body/stackFrames[0]/name == baz
+        expect /body/stackFrames[0]/id == 0
+        expect /body/stackFrames[0]/line == 2
+        expect /body/stackFrames[0]/column == 0
+        expect /body/stackFrames[0]/source/name == b.c
+        expect /body/stackFrames[0]/source/path == "$(path)/b.c"
+        expect /body/stackFrames[0]/source/sourceReference == 0
+
+        expect /body/stackFrames[1]/name == foo
+        expect /body/stackFrames[1]/id == 1
+        expect /body/stackFrames[1]/line == 9
+        expect /body/stackFrames[1]/column == 0
+        expect /body/stackFrames[1]/source/name == b.c
+        expect /body/stackFrames[1]/source/path == "$(path)/b.c"
+        expect /body/stackFrames[1]/source/sourceReference == 0
+
+        expect /body/stackFrames[2]/name == main
+        expect /body/stackFrames[2]/id == 2
+        expect /body/stackFrames[2]/line == 45
+        expect /body/stackFrames[2]/column == 0
+        expect /body/stackFrames[2]/source/name == a.c
+        expect /body/stackFrames[2]/source/path == "$(path)/a.c"
+        expect /body/stackFrames[2]/source/sourceReference == 0
+    }
+}
+
+case "Other hits for breakpoint inside loop" {
+    request '{"command":"continue","arguments":{"threadId":1},"type":"request","seq":17}'
+    response {
+        expect /type == "response"
+        expect /command == continue
+        expect /request_seq == 17
+        expect /success == true
+    }
+    response {
+        expect /type == event
+        expect /event == stopped
+        expect /body/reason == breakpoint
+    }
+    request '{"command":"stackTrace","arguments":{"threadId":1,"startFrame":0,"levels":20},"type":"request","seq":18}'
+    response {
+        expect /type == "response"
+        expect /command == stackTrace
+        expect /request_seq == 18
+        expect /success == true
+        expect /body/totalFrames == 1
+
+        expect /body/stackFrames[0]/name == main
+        expect /body/stackFrames[0]/id == 0
+        expect /body/stackFrames[0]/line == 40
+        expect /body/stackFrames[0]/column == 0
+        expect /body/stackFrames[0]/source/name == a.c
+        expect /body/stackFrames[0]/source/path == "$(path)/a.c"
+        expect /body/stackFrames[0]/source/sourceReference == 0
+    }
+    request '{"command":"continue","arguments":{"threadId":1},"type":"request","seq":19}'
+    response {
+        expect /type == "response"
+        expect /command == continue
+        expect /request_seq == 19
+        expect /success == true
+    }
+    response {
+        expect /type == event
+        expect /event == stopped
+        expect /body/reason == breakpoint
+    }
+    request '{"command":"stackTrace","arguments":{"threadId":1,"startFrame":0,"levels":20},"type":"request","seq":20}'
+    response {
+        expect /type == "response"
+        expect /command == stackTrace
+        expect /request_seq == 20
+        expect /success == true
+        expect /body/totalFrames == 1
+
+        expect /body/stackFrames[0]/name == main
+        expect /body/stackFrames[0]/id == 0
+        expect /body/stackFrames[0]/line == 40
+        expect /body/stackFrames[0]/column == 0
+        expect /body/stackFrames[0]/source/name == a.c
+        expect /body/stackFrames[0]/source/path == "$(path)/a.c"
+        expect /body/stackFrames[0]/source/sourceReference == 0
+    }
+    request '{"command":"continue","arguments":{"threadId":1},"type":"request","seq":21}'
+    response {
+        expect /type == "response"
+        expect /command == continue
+        expect /request_seq == 21
+        expect /success == true
+    }
+    response {
+        expect /type == event
+        expect /event == stopped
+        expect /body/reason == breakpoint
+    }
+    request '{"command":"stackTrace","arguments":{"threadId":1,"startFrame":0,"levels":20},"type":"request","seq":22}'
+    response {
+        expect /type == "response"
+        expect /command == stackTrace
+        expect /request_seq == 22
+        expect /success == true
+        expect /body/totalFrames == 1
+
+        expect /body/stackFrames[0]/name == main
+        expect /body/stackFrames[0]/id == 0
+        expect /body/stackFrames[0]/line == 40
+        expect /body/stackFrames[0]/column == 0
+        expect /body/stackFrames[0]/source/name == a.c
+        expect /body/stackFrames[0]/source/path == "$(path)/a.c"
+        expect /body/stackFrames[0]/source/sourceReference == 0
+    }
+    request '{"command":"continue","arguments":{"threadId":1},"type":"request","seq":23}'
+    response {
+        expect /type == "response"
+        expect /command == continue
+        expect /request_seq == 23
+        expect /success == true
+    }
+    response {
+        expect /type == event
+        expect /event == stopped
+        expect /body/reason == breakpoint
+    }
+    request '{"command":"stackTrace","arguments":{"threadId":1,"startFrame":0,"levels":20},"type":"request","seq":24}'
+    response {
+        expect /type == "response"
+        expect /command == stackTrace
+        expect /request_seq == 24
+        expect /success == true
+        expect /body/totalFrames == 1
+
+        expect /body/stackFrames[0]/name == main
+        expect /body/stackFrames[0]/id == 0
+        expect /body/stackFrames[0]/line == 40
+        expect /body/stackFrames[0]/column == 0
+        expect /body/stackFrames[0]/source/name == a.c
+        expect /body/stackFrames[0]/source/path == "$(path)/a.c"
+        expect /body/stackFrames[0]/source/sourceReference == 0
+    }
+}
+
+case "Hit breakpoint after the loop" {
+    request '{"command":"continue","arguments":{"threadId":1},"type":"request","seq":25}'
+    response {
+        expect /type == "response"
+        expect /command == continue
+        expect /request_seq == 25
+        expect /success == true
+    }
+    response {
+        expect /type == event
+        expect /event == stopped
+        expect /body/reason == breakpoint
+    }
+    request '{"command":"stackTrace","arguments":{"threadId":1,"startFrame":0,"levels":20},"type":"request","seq":26}'
+    response {
+        expect /type == "response"
+        expect /command == stackTrace
+        expect /request_seq == 26
+        expect /success == true
+        expect /body/totalFrames == 1
+
+        expect /body/stackFrames[0]/name == main
+        expect /body/stackFrames[0]/id == 0
+        expect /body/stackFrames[0]/line == 50
+        expect /body/stackFrames[0]/column == 0
+        expect /body/stackFrames[0]/source/name == a.c
+        expect /body/stackFrames[0]/source/path == "$(path)/a.c"
+        expect /body/stackFrames[0]/source/sourceReference == 0
+    }
+}
+
+case "Go to file end over unreachable breakpoint" {
+    request '{"command":"continue","arguments":{"threadId":1},"type":"request","seq":27}'
+    response {
+        expect /type == "response"
+        expect /command == continue
+        expect /request_seq == 27
+        expect /success == true
+    }
+    response {
+        expect /type == event
+        expect /event == stopped
+        expect /body/reason == exit
+    }
+    request '{"command":"stackTrace","arguments":{"threadId":1,"startFrame":0,"levels":20},"type":"request","seq":28}'
+    response {
+        expect /type == "response"
+        expect /command == stackTrace
+        expect /request_seq == 28
+        expect /success == true
+        expect /body/totalFrames == 1
+
+        expect /body/stackFrames[0]/name == main
+        expect /body/stackFrames[0]/id == 0
+        expect /body/stackFrames[0]/line == 58
+        expect /body/stackFrames[0]/column == 0
+        expect /body/stackFrames[0]/source/name == a.c
+        expect /body/stackFrames[0]/source/path == "$(path)/a.c"
+        expect /body/stackFrames[0]/source/sourceReference == 0
+    }
+}

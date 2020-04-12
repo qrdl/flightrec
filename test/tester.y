@@ -151,7 +151,7 @@ case
 /* have to use special rule for case keywork in order to report case start BEFORE the actual execution */
 case_begin
     : CASE STRING {
-        printf("\t\t%s ", $2.literal);
+        printf("\t%s ... ", $2.literal);
         fflush(stdout);
         free($2.literal);
     }
@@ -182,6 +182,7 @@ request
 response
     : response_begin '{' response_lines '}'
     | response_begin response_line
+    | response_begin '{' '}'
     ;
 
 /* have to use special rule for response keywork in order to actually read the response BEFORE the checking its content */
