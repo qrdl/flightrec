@@ -1005,6 +1005,7 @@ int get_pointer_size(ULONG address, ULONG *size) {
  *
  **************************************************************************/
 int func_name(ULONG address, char **name) {
+    address -= program_base_addr;
     if (!func_cursor) {
         if (DAB_OK != DAB_CURSOR_OPEN(&func_cursor,
             "SELECT "
