@@ -39,6 +39,12 @@
 
 #include "expressions/expression.h"
 
+#define STOP_REASON_STEP    1
+#define STOP_REASON_BREAK   2
+#define STOP_REASON_ENTRY   3
+#define STOP_REASON_SIGNAL  4
+#define STOP_REASON_EXIT    5
+
 // list of frames - for speed minimise new allocations/deallocations, try to reuse already allocated items
 // rewrite of list happens much more often than search
 struct frame {
@@ -51,7 +57,7 @@ struct frame {
 } *frame_list = NULL;
 
 static const char *build_response(const JSON_OBJ *request, JSON_OBJ *response, int status, const char *message);
-static void event_stopped(const char *reason, int fd);
+static void event_stopped(int fd, int reason);
 static void event_inited(int fd);
 static void event_terminated(int fd);
 static void send_event(JSON_OBJ *evt, const char *type, int fd);
@@ -63,6 +69,7 @@ char        *cur_file;
 uint64_t    cur_step;
 uint64_t    cur_line;
 int         cur_depth;
+int         signum; // non-zero if process ended with signal
 
 char *source_path = NULL;
 
@@ -186,6 +193,11 @@ int process_launch(const JSON_OBJ *request, int fd) {
     }
     source_path = strdup(source_path);  // need a copy because original becames unusable after JSON object released
 
+    int stop_on_entry = JSON_GET_BOOL_FIELD(args, "stopOnEntry");
+    if (JSON_OK != json_err) {
+        stop_on_entry = 0;
+    }
+
     if (SUCCESS != open_dbginfo(program)) {
         error = "Cannot read debug info";
         RETCLEAN(FAILURE);
@@ -227,8 +239,21 @@ int process_launch(const JSON_OBJ *request, int fd) {
     }
 
     ret = set_first_step(&error);
+    void *cursor;
+    if (DAB_OK == DAB_CURSOR_OPEN(&cursor, "SELECT value FROM misc WHERE key = 'exit_signal'")) {
+        if (DAB_OK != DAB_CURSOR_FETCH(cursor, &signum)) {
+            signum = 0;
+        }
+    }
+    DAB_CURSOR_FREE(cursor);
 
 cleanup:
+    /* request doesn't require to stop on entry, proceed to 'contnue' */
+    if (SUCCESS == ret && !stop_on_entry) {
+        JSON_RELEASE(rsp);
+        return process_continue(request, fd);
+    }
+
     response = build_response(request, rsp, ret, SUCCESS == ret ? NULL : error);
 
     int err = send_message(fd, response);
@@ -239,7 +264,7 @@ cleanup:
     JSON_RELEASE(rsp);
 
     if (SUCCESS == ret) {
-        event_stopped("entry", fd);
+        event_stopped(fd, STOP_REASON_ENTRY);
     }
 
     return ret;
@@ -440,6 +465,7 @@ int process_next(const JSON_OBJ *request, int fd) {
     const char *error;
     const char *response;
     int term = 0;
+    int stop_reason;
 
     if (!next_cursor) {
         if (DAB_OK != DAB_CURSOR_OPEN(&next_cursor,
@@ -471,12 +497,19 @@ int process_next(const JSON_OBJ *request, int fd) {
 
     ret = DAB_CURSOR_FETCH(next_cursor, &cur_file, &cur_line, &cur_step, &cur_depth);
     if (DAB_NO_DATA == ret) {
-        term = 1;
+        /* if program stopped due to signal, set appropriate stop reason */
+        if (signum) {
+            stop_reason = STOP_REASON_SIGNAL;
+        } else {
+            stop_reason = STOP_REASON_EXIT;
+            term = 1;
+        }
         ret = SUCCESS;
     } else if (DAB_OK != ret) {
         ERR("Cannot get next step");
         RETCLEAN(FAILURE);
     } else {
+        stop_reason = STOP_REASON_STEP;
         ret = SUCCESS;
     }
 
@@ -492,7 +525,7 @@ cleanup:
     if (term) {
         event_terminated(fd);
     } else if (SUCCESS == ret) {
-        event_stopped("step", fd);
+        event_stopped(fd, stop_reason);
     }
 
     return ret;
@@ -517,6 +550,7 @@ int process_stepin(const JSON_OBJ *request, int fd) {
     const char *error;
     const char *response;
     int term = 0;
+    int stop_reason;
 
     if (!stepin_cursor) {
         if (DAB_OK != DAB_CURSOR_OPEN(&stepin_cursor,
@@ -543,12 +577,19 @@ int process_stepin(const JSON_OBJ *request, int fd) {
 
     ret = DAB_CURSOR_FETCH(stepin_cursor, &cur_file, &cur_line, &cur_step, &cur_depth);
     if (DAB_NO_DATA == ret) {
-        term = 1;
+        /* if program stopped due to signal, set appropriate stop reason */
+        if (signum) {
+            stop_reason = STOP_REASON_SIGNAL;
+        } else {
+            stop_reason = STOP_REASON_EXIT;
+            term = 1;
+        }
         ret = SUCCESS;
     } else if (DAB_OK != ret) {
         ERR("Cannot get next step");
         RETCLEAN(FAILURE);
     } else {
+        stop_reason = STOP_REASON_STEP;
         ret = SUCCESS;
     }
 
@@ -564,7 +605,7 @@ cleanup:
     if (term) {
         event_terminated(fd);
     } else if (SUCCESS == ret) {
-        event_stopped("step", fd);
+        event_stopped(fd, stop_reason);
     }
 
     return ret;
@@ -589,6 +630,7 @@ int process_stepout(const JSON_OBJ *request, int fd) {
     const char *error;
     const char *response;
     int term = 0;
+    int stop_reason;
 
     if (cur_depth <= 1) {   // do nothing - already at top level
         RETCLEAN(SUCCESS);
@@ -623,12 +665,19 @@ int process_stepout(const JSON_OBJ *request, int fd) {
 
     ret = DAB_CURSOR_FETCH(stepout_cursor, &cur_file, &cur_line, &cur_step, &cur_depth);
     if (DAB_NO_DATA == ret) {
-        term = 1;
+        /* if program stopped due to signal, set appropriate stop reason */
+        if (signum) {
+            stop_reason = STOP_REASON_SIGNAL;
+        } else {
+            stop_reason = STOP_REASON_EXIT;
+            term = 1;
+        }
         ret = SUCCESS;
     } else if (DAB_OK != ret) {
         ERR("Cannot get next step");
         RETCLEAN(FAILURE);
     } else {
+        stop_reason = STOP_REASON_STEP;
         ret = SUCCESS;
     }
 
@@ -644,7 +693,7 @@ cleanup:
     if (term) {
         event_terminated(fd);
     } else if (SUCCESS == ret) {
-        event_stopped("step", fd);
+        event_stopped(fd, stop_reason);
     }
 
     return ret;
@@ -726,7 +775,7 @@ cleanup:
     if (term) {
         event_terminated(fd);
     } else if (SUCCESS == ret) {
-        event_stopped("step", fd);
+        event_stopped(fd, STOP_REASON_STEP);
     }
 
     return ret;
@@ -885,7 +934,7 @@ int process_continue(const JSON_OBJ *request, int fd) {
     int ret = SUCCESS;
     const char *error;
     const char *response;
-    char *stop_reason;
+    int stop_reason;
 
     if (!continue_cursor) {
         if (DAB_OK != DAB_CURSOR_OPEN(&continue_cursor,
@@ -917,13 +966,18 @@ int process_continue(const JSON_OBJ *request, int fd) {
 
     ret = DAB_CURSOR_FETCH(continue_cursor, &cur_file, &cur_line, &cur_step, &cur_depth);
     if (DAB_NO_DATA == ret) {
-        stop_reason = "exit";
         ret = set_last_step(&error);
+        /* if program stopped due to signal, set appropriate stop reason */
+        if (signum) {
+            stop_reason = STOP_REASON_SIGNAL;
+        } else {
+            stop_reason = STOP_REASON_EXIT;
+        }
     } else if (DAB_OK != ret) {
         ERR("Cannot get next step");
         RETCLEAN(FAILURE);
     } else {
-        stop_reason = "breakpoint";
+        stop_reason = STOP_REASON_BREAK;
         ret = SUCCESS;
     }
 
@@ -937,7 +991,7 @@ cleanup:
     JSON_RELEASE(rsp);
 
     if (SUCCESS == ret) {
-        event_stopped(stop_reason, fd);
+        event_stopped(fd, stop_reason);
     }
 
     return ret;
@@ -961,7 +1015,7 @@ int process_revcontinue(const JSON_OBJ *request, int fd) {
     int ret = SUCCESS;
     const char *error = NULL;
     const char *response;
-    char *stop_reason;
+    int stop_reason;
 
     if (!revcontinue_cursor) {
         if (DAB_OK != DAB_CURSOR_OPEN(&revcontinue_cursor,
@@ -993,13 +1047,13 @@ int process_revcontinue(const JSON_OBJ *request, int fd) {
 
     ret = DAB_CURSOR_FETCH(revcontinue_cursor, &cur_file, &cur_line, &cur_step, &cur_depth);
     if (DAB_NO_DATA == ret) {
-        stop_reason = "entry";
+        stop_reason = STOP_REASON_ENTRY;
         ret = set_first_step(&error);
     } else if (DAB_OK != ret) {
         ERR("Cannot get next step");
         RETCLEAN(FAILURE);
     } else {
-        stop_reason = "breakpoint";
+        stop_reason = STOP_REASON_BREAK;
         ret = SUCCESS;
     }
 
@@ -1013,7 +1067,7 @@ cleanup:
     JSON_RELEASE(rsp);
 
     if (SUCCESS == ret) {
-        event_stopped(stop_reason, fd);
+        event_stopped(fd, stop_reason);
     }
 
     return ret;
@@ -1415,7 +1469,6 @@ const char *build_response(const JSON_OBJ *request, JSON_OBJ *response, int stat
     return JSON_PRINT(response);
 }
 
-
 /**************************************************************************
  *
  *  Function:   event_stopped
@@ -1428,12 +1481,34 @@ const char *build_response(const JSON_OBJ *request, JSON_OBJ *response, int stat
  *  Descr:      Send 'stopped' event with specified reason
  *
  **************************************************************************/
-void event_stopped(const char *reason, int fd) {
+void event_stopped(int fd, int reason) {
     JSON_OBJ *evt = JSON_NEW_OBJ();
 
     JSON_OBJ *body = JSON_NEW_OBJ_FIELD(evt, "body");
-    JSON_NEW_STRING_FIELD(body, "reason", reason);
+    switch (reason) {
+        case STOP_REASON_ENTRY:
+            JSON_NEW_STRING_FIELD(body, "reason", "entry");
+            break;
+        case STOP_REASON_EXIT:
+            JSON_NEW_STRING_FIELD(body, "reason", "exit");
+            break;
+        case STOP_REASON_BREAK:
+            JSON_NEW_STRING_FIELD(body, "reason", "breakpoint");
+            break;
+        case STOP_REASON_SIGNAL:
+            JSON_NEW_STRING_FIELD(body, "reason", "exception");
+            break;
+        case STOP_REASON_STEP:
+            JSON_NEW_STRING_FIELD(body, "reason", "step");
+            break;
+    }
     JSON_NEW_INT32_FIELD(body, "threadId", 1);
+    if (STOP_REASON_SIGNAL == reason && signum) {
+        char text[64];
+        snprintf(text, sizeof(text), "Caught signal %s (%d)", strsignal(signum), signum);
+        JSON_NEW_STRING_FIELD(body, "description", text);
+        JSON_NEW_STRING_FIELD(body, "text", text);
+    }
 
     send_event(evt, "stopped", fd);
     JSON_RELEASE(evt);

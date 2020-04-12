@@ -76,7 +76,9 @@ int fifo_fd = 0;
 static struct channel *insert_step_ch;
 static struct channel *insert_heap_ch;
 struct channel *insert_mem_ch;          // not static because is used in mem.c
-static uint64_t exepage_offset;        // offset used for virtual -> physical address translation
+/* child program base address. Addresses from debug info may or may not contain base address, so if accessing child
+   memory fails, assume addresses need to be adjusted by base address */
+static uint64_t base_address = 0;
 
 
 /**************************************************************************
@@ -127,15 +129,18 @@ int record(char *fr_path, char *params[]) {
         START_WORKER(mem);
 
         int first = 1;
+        int signum;
         while (-1 != ptrace(PTRACE_CONT, pid, NULL, NULL)) {
             waitpid(pid, &wait_status, 0);      // wait for SIGTRAP from child, indicating the breakpoint
             if (WIFEXITED(wait_status)) {
                 INFO("child exited");
+                signum = 0;
                 break;                          // child exited ok
             }
             if (first) {
                 /* cannot init memory before as this is the first point where tracee is
-                   fully initialised. Consider moving out of loop */
+                   fully initialised.
+                   TODO Consider moving out of loop */
                 if (SUCCESS != mem_init(pid)) {
                     return FAILURE;
                 }
@@ -143,12 +148,13 @@ int record(char *fr_path, char *params[]) {
             }
 
             if (WIFSTOPPED(wait_status)) {
-                if (WSTOPSIG(wait_status) == SIGTRAP) {
+                signum = WSTOPSIG(wait_status);
+                if (SIGTRAP == signum) {
                     if (SUCCESS != process_breakpoint(pid)) {
                         return FAILURE;
                     }
                 } else {
-                    INFO("child stopped - sig %d", WSTOPSIG(wait_status));
+                    INFO("child stopped - sig %d", signum);
                     break;                          // child exited ok
                 }
             } else {
@@ -168,6 +174,19 @@ int record(char *fr_path, char *params[]) {
 
         close(fifo_fd);
         unlink(fifo_name);
+
+        /* TODO I don't know why but inserting of signal into DB fails with 'locked', so DB close/open helps */
+        DAB_CLOSE(0);
+        if (signum) {
+            extern char *db_name;
+            if (DAB_OK != DAB_OPEN(db_name, DAB_FLAG_NONE)) {     // already in multi-threaded mode
+                return NULL;
+            }
+            if (DAB_OK != DAB_EXEC("INSERT INTO misc (key, value) VALUES ('exit_signal', 11)")) {
+                ERR("Cannot store exit signal in DB");
+            }
+        }
+
     } else {
         /* child */
         if (-1 == ptrace(PTRACE_TRACEME, 0, NULL, NULL)) {
@@ -216,7 +235,7 @@ int set_breakpoints(pid_t pid) {
         return FAILURE;
     }
 
-    if (DAB_OK != DAB_EXEC("BEGIN TRANSACTION")) {
+    if (DAB_OK != DAB_BEGIN) {
         return FAILURE;
     }
 
@@ -227,19 +246,24 @@ int set_breakpoints(pid_t pid) {
         REG_TYPE instr;
         do {
             errno = 0;  // PTRACE_PEEKDATA can return anything, even -1, so use only errno for diag
-            instr = ptrace(PTRACE_PEEKDATA, pid, (void *)(address+exepage_offset), NULL);
+            instr = ptrace(PTRACE_PEEKDATA, pid, (void *)(address+base_address), NULL);
             if (errno) {
-                if (EIO == errno && !exepage_offset) {
-                    /* may fail because address needs to be translated - find the offset */
-                    if (SUCCESS != get_translation_offset(pid, address, &exepage_offset)) {
+                if (EIO == errno && !base_address) {
+                    /* may fail because address needs to be adjusted by base address */
+                    if (SUCCESS != get_base_address(pid, &base_address)) {
                         RETCLEAN(FAILURE);
                     }
-                    continue;   // repeat the attempt with non-zero exepage_offset
+                    if (!base_address) {
+                        ERR("Cannot peek at child code (base addr is zero) - %s", strerror(errno));
+                        RETCLEAN(FAILURE);
+                    }
+                    /* adjust unit addesses in DB */
+                    if (DAB_OK != DAB_EXEC("UPDATE unit SET base_addr = base_addr + ?", base_address)) {
+                        ERR("Cannot update unit base address");
+                        RETCLEAN(FAILURE);
+                    }
+                    continue;   // repeat the attempt with non-zero base_address
                 }
-		if (!exepage_offset) {
-		    ERR("Offset is zero");
-		    RETCLEAN(FAILURE);
-		}
                 ERR("Cannot peek at child code - %s", strerror(errno));
                 RETCLEAN(FAILURE);
             }
@@ -268,7 +292,7 @@ int set_breakpoints(pid_t pid) {
         }
         /* update child code */
         instr = (instr & ~0xFF) | int3;
-        if (-1 == ptrace(PTRACE_POKEDATA, pid, (void *)(address+exepage_offset), (void *)instr)) {
+        if (-1 == ptrace(PTRACE_POKEDATA, pid, (void *)(address+base_address), (void *)instr)) {
             ERR("Cannot update child code - %s", strerror(errno));
             RETCLEAN(FAILURE);
         }
@@ -280,10 +304,10 @@ int set_breakpoints(pid_t pid) {
 cleanup:
     DAB_CURSOR_FREE(cursor);
     DAB_CURSOR_FREE(update_cursor);
-    if (SUCCESS == ret && DAB_OK == DAB_EXEC("COMMIT")) {
+    if (SUCCESS == ret && DAB_OK == DAB_COMMIT) {
         return SUCCESS;
     }
-    DAB_EXEC("ROLLBACK");
+    DAB_ROLLBACK;
 
     return ret;
 }
@@ -322,7 +346,7 @@ int process_breakpoint(pid_t pid) {
     int saved;
 
     DAB_CURSOR_RESET(select_line);
-    if (DAB_OK != DAB_CURSOR_BIND(select_line, pc - exepage_offset)) {
+    if (DAB_OK != DAB_CURSOR_BIND(select_line, pc - base_address)) {
         return FAILURE;
     }
 

@@ -48,7 +48,7 @@ char            *acceptable_path;
 struct entry    *ignore_unit;
 struct entry    *process_unit;
 
-char *db_name;  // alose used by workers
+char *db_name;  // DB file name used by workers
 
 /**************************************************************************
  *

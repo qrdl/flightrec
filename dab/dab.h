@@ -1,6 +1,6 @@
 /**************************************************************************
  *
- *  File:       dab.c
+ *  File:       dab.h
  *
  *  Project:    Flight recorder (https://github.com/qrdl/flightrec)
  *

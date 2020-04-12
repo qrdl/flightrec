@@ -679,17 +679,18 @@ int process_dirty_page(ULONG start, ULONG step_id) {
 
 /**************************************************************************
  *
- *  Function:   get_translation_offset
+ *  Function:   get_base_address
  *
- *  Params:     address - virtual address to translate
- *              offset - where to store offset
+ *  Params:     pid - process PID
+ *              base - where to store base address
  *
  *  Return:     SUCCESS / FAILURE
  *
- *  Descr:      Find offset for translation of virtual addr to physical one
+ *  Descr:      Find base address from program executable memory region
+ *              address
  *
  **************************************************************************/
-int get_translation_offset(pid_t p, uint64_t address, uint64_t *offset) {
+int get_base_address(pid_t p, uint64_t *base) {
     char exe_name[PATH_MAX];
     char tmp[256];
 
@@ -724,10 +725,8 @@ int get_translation_offset(pid_t p, uint64_t address, uint64_t *offset) {
             i++;
         }
         if (!strcmp(field, exe_name)) {
-            ULONG head, tail;
             /* first field, already 0-terminated, has start and end address */
-            sscanf(tmp, "%" PRIx64 "-%" PRIx64, &head, &tail);
-            *offset = head - (address & PAGE_MASK);
+            sscanf(tmp, "%" PRIx64, base);
             break;
        }
     }

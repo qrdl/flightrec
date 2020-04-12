@@ -159,6 +159,13 @@ int create_db(void) {
         return FAILURE;
     }
 
+    if (DAB_OK != DAB_EXEC("CREATE TABLE misc ("
+                                "key            VARCHAR PRIMARY KEY, "
+                                "value"                                 // value can be of any type, so avoid the type
+                            ")")) {
+        return FAILURE;
+    }
+
     return SUCCESS;
 }
 
