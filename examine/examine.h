@@ -63,6 +63,7 @@ void release_cursors(void);
 extern int listener;
 
 extern uint64_t cur_step;
+extern uint64_t program_base_addr;
 
 // these statements are used only in var_value.c, but need to be released in requests.c
 extern void *var_cursor;

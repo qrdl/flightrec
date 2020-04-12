@@ -70,6 +70,7 @@ uint64_t    cur_step;
 uint64_t    cur_line;
 int         cur_depth;
 int         signum; // non-zero if process ended with signal
+uint64_t    program_base_addr;
 
 char *source_path = NULL;
 
@@ -243,6 +244,12 @@ int process_launch(const JSON_OBJ *request, int fd) {
     if (DAB_OK == DAB_CURSOR_OPEN(&cursor, "SELECT value FROM misc WHERE key = 'exit_signal'")) {
         if (DAB_OK != DAB_CURSOR_FETCH(cursor, &signum)) {
             signum = 0;
+        }
+    }
+    DAB_CURSOR_FREE(cursor);
+    if (DAB_OK == DAB_CURSOR_OPEN(&cursor, "SELECT value FROM misc WHERE key = 'base_address'")) {
+        if (DAB_OK != DAB_CURSOR_FETCH(cursor, &program_base_addr)) {
+            program_base_addr = 0;
         }
     }
     DAB_CURSOR_FREE(cursor);

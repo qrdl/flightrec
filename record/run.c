@@ -180,7 +180,7 @@ int record(char *fr_path, char *params[]) {
         if (signum) {
             extern char *db_name;
             if (DAB_OK != DAB_OPEN(db_name, DAB_FLAG_NONE)) {     // already in multi-threaded mode
-                return NULL;
+                return FAILURE;
             }
             if (DAB_OK != DAB_EXEC("INSERT INTO misc (key, value) VALUES ('exit_signal', 11)")) {
                 ERR("Cannot store exit signal in DB");
@@ -257,8 +257,8 @@ int set_breakpoints(pid_t pid) {
                         ERR("Cannot peek at child code (base addr is zero) - %s", strerror(errno));
                         RETCLEAN(FAILURE);
                     }
-                    /* adjust unit addesses in DB */
-                    if (DAB_OK != DAB_EXEC("UPDATE unit SET base_addr = base_addr + ?", base_address)) {
+                    /* save base address for further use by Examine */
+                    if (DAB_OK != DAB_EXEC("INSERT INTO misc (key, value) VALUES ('base_address', ?)", base_address)) {
                         ERR("Cannot update unit base address");
                         RETCLEAN(FAILURE);
                     }

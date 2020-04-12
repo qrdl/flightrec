@@ -431,6 +431,10 @@ int add_var_fields(JSON_OBJ *container, ULONG ref_id) {
  *  Return:     SUCCESS / FAILURE
  *
  *  Descr:      Find location of variable, for given value of PC
+ * 
+ *  Note:       base_addr, passed as param, is unit base address, and it
+ *              doesn't necessarely include program base address, so it
+ *              is added here
  *
  **************************************************************************/
 int get_location(Dwarf_Attribute attrib, REG_TYPE pc, LLONG base_addr, struct user_regs_struct *regs, LLONG *address) {
@@ -467,8 +471,8 @@ int get_location(Dwarf_Attribute attrib, REG_TYPE pc, LLONG base_addr, struct us
 
         // TODO: support other possible lle_value
         if (DW_LLEX_offset_pair_entry == lle_value) {
-            lo_pc += base_addr;
-            hi_pc += base_addr;
+            lo_pc += base_addr + program_base_addr;
+            hi_pc += base_addr + program_base_addr;
         }
 
         switch (list_source) {
@@ -488,7 +492,7 @@ int get_location(Dwarf_Attribute attrib, REG_TYPE pc, LLONG base_addr, struct us
                     }
                     switch (op) {
                         case DW_OP_addr:            // absolute address
-                            *address = (LLONG)opd1;
+                            *address = (LLONG)opd1 + program_base_addr;
                             break;
                         case DW_OP_fbreg:           // address relative to frame base, signed
                             *address = (LLONG)opd1;     // opd1 is unsigned but holds a negative signed value, so casting to signed type fixes it

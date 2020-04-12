@@ -31,9 +31,15 @@
 #include <x86intrin.h>
 #include <stdint.h>
 
+#ifdef __AVX512DQ__
 static int memdiff64(const char *buf1, const char *buf2, size_t size);
+#endif
+#ifdef __AVX2__
 static int memdiff32(const char *buf1, const char *buf2, size_t size);
+#endif
+#ifdef __SSE2__
 static int memdiff16(const char *buf1, const char *buf2, size_t size);
+#endif
 static int memdiff8(const char *buf1, const char *buf2, size_t size);
 
 /**************************************************************************
