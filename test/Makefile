@@ -1,20 +1,25 @@
 CFLAGS := -g3 -gdwarf-2 -O0
 
-.PHONY : all prepare run
+.PHONY : all run
 
-OBJFILES = a.o b.o
+##### test binaries
 
-all: test tester
+TESTBINS = test1 test2
 
-test: $(OBJFILES)
-	$(CC) $(CFLAGS) $^ -o $@
+all: $(TESTBINS) tester
 
-test.fr prepare: test
-#	dwarfdump ./test >test.dump
-	../fr_record -l test.log -- ./test
-
-run: test.fr tester
+run: tester
+run: ${TESTBINS:%=%.fr}
 	./tester -v path="$(shell pwd)" *.test
+
+%.fr: %
+	../fr_record -l test.log -- ./$^
+
+.SECONDEXPANSION:
+$(TESTBINS): $$(addsuffix *.c,$$@)
+	$(CC) $(CFLAGS) -o $@ $^
+
+##### tester
 
 tester: y.tab.o lex.yy.o tester_func.o ../jsonapi/jsonapi.o
 	$(CC) -o $@ $^ -lfl -ljson-c -lm
@@ -32,4 +37,5 @@ tester_func.o: tester_func.c tester.h
 	$(CC) -I../jsonapi -g -c -o $@ tester_func.c -I..
 
 clean:
-	rm -f test test.fr* test.dump $(OBJFILES) test.log tester lex.yy.c y.tab.c lex.yy.o y.tab.o y.tab.h tester_func.o
+	rm -f $(TESTBINS) *.o *.fr* test.log tester lex.yy.c y.tab.c y.tab.h
+

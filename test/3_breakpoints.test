@@ -10,7 +10,8 @@ case "Init" {
     response {
         # ignore init done event
     }
-    request '{"command":"launch","arguments":{"request":"launch","program":"$(path)/test","sourcePath":"$(path)","stopOnEntry":true,},"type":"request","seq":2}'
+    # important - stopOnEntry isn't specified so "execution" is delayed until configurationDone command received
+    request '{"command":"launch","arguments":{"request":"launch","program":"$(path)/test1","sourcePath":"$(path)"},"type":"request","seq":2}'
     # response
     response {
         expect /type == "response"
@@ -18,13 +19,10 @@ case "Init" {
         expect /request_seq == 2
         expect /success == true
     }
-    response {
-        # ignore stopped event
-    }
 }
 
 case "Set five breakpoints in first file (2 unreachable)" {
-    request '{"command":"setBreakpoints","arguments":{"source":{"name":"a.c","path":"$(path)/a.c"},"lines":[34,40,42,50,55],"breakpoints":[{"line":34},{"line":40},{"line":42},{"line":50},{"line":55}],"sourceModified":false},"type":"request","seq":3}'
+    request '{"command":"setBreakpoints","arguments":{"source":{"name":"test1_a.c","path":"$(path)/test1_a.c"},"lines":[34,40,42,50,55],"breakpoints":[{"line":34},{"line":40},{"line":42},{"line":50},{"line":55}],"sourceModified":false},"type":"request","seq":3}'
     response {
         expect /type == "response"
         expect /command == setBreakpoints
@@ -45,7 +43,7 @@ case "Set five breakpoints in first file (2 unreachable)" {
 }
 
 case "Set one breakpoint in second file" {
-    request '{"command":"setBreakpoints","arguments":{"source":{"name":"b.c","path":"$(path)/b.c"},"lines":[2],"breakpoints":[{"line":2}],"sourceModified":false},"type":"request","seq":4}'
+    request '{"command":"setBreakpoints","arguments":{"source":{"name":"test1_b.c","path":"$(path)/test1_b.c"},"lines":[2],"breakpoints":[{"line":2}],"sourceModified":false},"type":"request","seq":4}'
     response {
         expect /type == "response"
         expect /command == setBreakpoints
@@ -57,11 +55,11 @@ case "Set one breakpoint in second file" {
     }
 }
 
-case "Hit first breakpoint" {
-    request '{"command":"continue","arguments":{"threadId":1},"type":"request","seq":5}'
+case "ConfigurationDone causes stop on first breakpoint" {
+    request '{"command":"configurationDone","type":"request","seq":5}'
     response {
         expect /type == "response"
-        expect /command == continue
+        expect /command == configurationDone
         expect /request_seq == 5
         expect /success == true
     }
@@ -82,8 +80,8 @@ case "Hit first breakpoint" {
         expect /body/stackFrames[0]/id == 0
         expect /body/stackFrames[0]/line == 34
         expect /body/stackFrames[0]/column == 0
-        expect /body/stackFrames[0]/source/name == a.c
-        expect /body/stackFrames[0]/source/path == "$(path)/a.c"
+        expect /body/stackFrames[0]/source/name == test1_a.c
+        expect /body/stackFrames[0]/source/path == "$(path)/test1_a.c"
         expect /body/stackFrames[0]/source/sourceReference == 0
     }
 }
@@ -113,8 +111,8 @@ case "Hit breakpoint inside loop" {
         expect /body/stackFrames[0]/id == 0
         expect /body/stackFrames[0]/line == 40
         expect /body/stackFrames[0]/column == 0
-        expect /body/stackFrames[0]/source/name == a.c
-        expect /body/stackFrames[0]/source/path == "$(path)/a.c"
+        expect /body/stackFrames[0]/source/name == test1_a.c
+        expect /body/stackFrames[0]/source/path == "$(path)/test1_a.c"
         expect /body/stackFrames[0]/source/sourceReference == 0
     }
 }
@@ -144,8 +142,8 @@ case "Back to first breakpoint" {
         expect /body/stackFrames[0]/id == 0
         expect /body/stackFrames[0]/line == 34
         expect /body/stackFrames[0]/column == 0
-        expect /body/stackFrames[0]/source/name == a.c
-        expect /body/stackFrames[0]/source/path == "$(path)/a.c"
+        expect /body/stackFrames[0]/source/name == test1_a.c
+        expect /body/stackFrames[0]/source/path == "$(path)/test1_a.c"
         expect /body/stackFrames[0]/source/sourceReference == 0
     }
 }
@@ -175,8 +173,8 @@ case "Again breakpoint inside loop" {
         expect /body/stackFrames[0]/id == 0
         expect /body/stackFrames[0]/line == 40
         expect /body/stackFrames[0]/column == 0
-        expect /body/stackFrames[0]/source/name == a.c
-        expect /body/stackFrames[0]/source/path == "$(path)/a.c"
+        expect /body/stackFrames[0]/source/name == test1_a.c
+        expect /body/stackFrames[0]/source/path == "$(path)/test1_a.c"
         expect /body/stackFrames[0]/source/sourceReference == 0
     }
 }
@@ -206,24 +204,24 @@ case "Hit breakpoint in different file" {
         expect /body/stackFrames[0]/id == 0
         expect /body/stackFrames[0]/line == 2
         expect /body/stackFrames[0]/column == 0
-        expect /body/stackFrames[0]/source/name == b.c
-        expect /body/stackFrames[0]/source/path == "$(path)/b.c"
+        expect /body/stackFrames[0]/source/name == test1_b.c
+        expect /body/stackFrames[0]/source/path == "$(path)/test1_b.c"
         expect /body/stackFrames[0]/source/sourceReference == 0
 
         expect /body/stackFrames[1]/name == foo
         expect /body/stackFrames[1]/id == 1
         expect /body/stackFrames[1]/line == 9
         expect /body/stackFrames[1]/column == 0
-        expect /body/stackFrames[1]/source/name == b.c
-        expect /body/stackFrames[1]/source/path == "$(path)/b.c"
+        expect /body/stackFrames[1]/source/name == test1_b.c
+        expect /body/stackFrames[1]/source/path == "$(path)/test1_b.c"
         expect /body/stackFrames[1]/source/sourceReference == 0
 
         expect /body/stackFrames[2]/name == main
         expect /body/stackFrames[2]/id == 2
         expect /body/stackFrames[2]/line == 45
         expect /body/stackFrames[2]/column == 0
-        expect /body/stackFrames[2]/source/name == a.c
-        expect /body/stackFrames[2]/source/path == "$(path)/a.c"
+        expect /body/stackFrames[2]/source/name == test1_a.c
+        expect /body/stackFrames[2]/source/path == "$(path)/test1_a.c"
         expect /body/stackFrames[2]/source/sourceReference == 0
     }
 }
@@ -253,24 +251,24 @@ case "Hit same breakpoint second time" {
         expect /body/stackFrames[0]/id == 0
         expect /body/stackFrames[0]/line == 2
         expect /body/stackFrames[0]/column == 0
-        expect /body/stackFrames[0]/source/name == b.c
-        expect /body/stackFrames[0]/source/path == "$(path)/b.c"
+        expect /body/stackFrames[0]/source/name == test1_b.c
+        expect /body/stackFrames[0]/source/path == "$(path)/test1_b.c"
         expect /body/stackFrames[0]/source/sourceReference == 0
 
         expect /body/stackFrames[1]/name == foo
         expect /body/stackFrames[1]/id == 1
         expect /body/stackFrames[1]/line == 9
         expect /body/stackFrames[1]/column == 0
-        expect /body/stackFrames[1]/source/name == b.c
-        expect /body/stackFrames[1]/source/path == "$(path)/b.c"
+        expect /body/stackFrames[1]/source/name == test1_b.c
+        expect /body/stackFrames[1]/source/path == "$(path)/test1_b.c"
         expect /body/stackFrames[1]/source/sourceReference == 0
 
         expect /body/stackFrames[2]/name == main
         expect /body/stackFrames[2]/id == 2
         expect /body/stackFrames[2]/line == 45
         expect /body/stackFrames[2]/column == 0
-        expect /body/stackFrames[2]/source/name == a.c
-        expect /body/stackFrames[2]/source/path == "$(path)/a.c"
+        expect /body/stackFrames[2]/source/name == test1_a.c
+        expect /body/stackFrames[2]/source/path == "$(path)/test1_a.c"
         expect /body/stackFrames[2]/source/sourceReference == 0
     }
 }
@@ -300,8 +298,8 @@ case "Other hits for breakpoint inside loop" {
         expect /body/stackFrames[0]/id == 0
         expect /body/stackFrames[0]/line == 40
         expect /body/stackFrames[0]/column == 0
-        expect /body/stackFrames[0]/source/name == a.c
-        expect /body/stackFrames[0]/source/path == "$(path)/a.c"
+        expect /body/stackFrames[0]/source/name == test1_a.c
+        expect /body/stackFrames[0]/source/path == "$(path)/test1_a.c"
         expect /body/stackFrames[0]/source/sourceReference == 0
     }
     request '{"command":"continue","arguments":{"threadId":1},"type":"request","seq":19}'
@@ -328,8 +326,8 @@ case "Other hits for breakpoint inside loop" {
         expect /body/stackFrames[0]/id == 0
         expect /body/stackFrames[0]/line == 40
         expect /body/stackFrames[0]/column == 0
-        expect /body/stackFrames[0]/source/name == a.c
-        expect /body/stackFrames[0]/source/path == "$(path)/a.c"
+        expect /body/stackFrames[0]/source/name == test1_a.c
+        expect /body/stackFrames[0]/source/path == "$(path)/test1_a.c"
         expect /body/stackFrames[0]/source/sourceReference == 0
     }
     request '{"command":"continue","arguments":{"threadId":1},"type":"request","seq":21}'
@@ -356,8 +354,8 @@ case "Other hits for breakpoint inside loop" {
         expect /body/stackFrames[0]/id == 0
         expect /body/stackFrames[0]/line == 40
         expect /body/stackFrames[0]/column == 0
-        expect /body/stackFrames[0]/source/name == a.c
-        expect /body/stackFrames[0]/source/path == "$(path)/a.c"
+        expect /body/stackFrames[0]/source/name == test1_a.c
+        expect /body/stackFrames[0]/source/path == "$(path)/test1_a.c"
         expect /body/stackFrames[0]/source/sourceReference == 0
     }
     request '{"command":"continue","arguments":{"threadId":1},"type":"request","seq":23}'
@@ -384,8 +382,8 @@ case "Other hits for breakpoint inside loop" {
         expect /body/stackFrames[0]/id == 0
         expect /body/stackFrames[0]/line == 40
         expect /body/stackFrames[0]/column == 0
-        expect /body/stackFrames[0]/source/name == a.c
-        expect /body/stackFrames[0]/source/path == "$(path)/a.c"
+        expect /body/stackFrames[0]/source/name == test1_a.c
+        expect /body/stackFrames[0]/source/path == "$(path)/test1_a.c"
         expect /body/stackFrames[0]/source/sourceReference == 0
     }
 }
@@ -415,8 +413,8 @@ case "Hit breakpoint after the loop" {
         expect /body/stackFrames[0]/id == 0
         expect /body/stackFrames[0]/line == 50
         expect /body/stackFrames[0]/column == 0
-        expect /body/stackFrames[0]/source/name == a.c
-        expect /body/stackFrames[0]/source/path == "$(path)/a.c"
+        expect /body/stackFrames[0]/source/name == test1_a.c
+        expect /body/stackFrames[0]/source/path == "$(path)/test1_a.c"
         expect /body/stackFrames[0]/source/sourceReference == 0
     }
 }
@@ -446,8 +444,11 @@ case "Go to file end over unreachable breakpoint" {
         expect /body/stackFrames[0]/id == 0
         expect /body/stackFrames[0]/line == 58
         expect /body/stackFrames[0]/column == 0
-        expect /body/stackFrames[0]/source/name == a.c
-        expect /body/stackFrames[0]/source/path == "$(path)/a.c"
+        expect /body/stackFrames[0]/source/name == test1_a.c
+        expect /body/stackFrames[0]/source/path == "$(path)/test1_a.c"
         expect /body/stackFrames[0]/source/sourceReference == 0
     }
 }
+
+stop
+
