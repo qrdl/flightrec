@@ -1,0 +1,172 @@
+# Caller must set $(path)
+start "../examine/fr_examine"
+
+case "Init" {
+    request '{"command":"initialize","arguments":{"clientID":"tester","clientName":"Tester"},"type":"request","seq":1}'
+    # response
+    response {
+        expect /type == "response"
+        expect /request_seq == 1
+        expect /command == initialize
+        expect /success == true
+        expect /body/supportsConfigurationDoneRequest == true
+        expect /body/supportsStepBack == true
+        expect /body/supportsStepInTargetsRequest == true
+    }
+    # init done event
+    response {
+        expect /type == event
+        expect /event == initialized
+    }
+}
+
+case "Launch" {
+    request '{"command":"launch","arguments":{"request":"launch","program":"$(path)/test2","sourcePath":"$(path)","stopOnEntry":true,},"type":"request","seq":2}'
+    # response
+    response {
+        expect /type == "response"
+        expect /command == launch
+        expect /request_seq == 2
+        expect /success == true
+    }
+    # stop on entry
+    response {
+        expect /type == event
+        expect /event == stopped
+        expect /body/reason == entry
+    }
+    request '{"command":"configurationDone","type":"request","seq":3}'
+    # response
+    response {
+        expect /type == "response"
+        expect /command == configurationDone
+        expect /request_seq == 3
+        expect /success == true
+    }
+}
+
+case "Continue (to crash)" {
+    request '{"command":"continue","arguments":{"threadId":1},"type":"request","seq":4}'
+    response {
+        expect /type == "response"
+        expect /command == continue
+        expect /request_seq == 4
+        expect /success == true
+    }
+    response {
+        expect /type == event
+        expect /event == stopped
+        expect /body/reason == exception
+        expect /body/description == "Caught signal Segmentation fault (11)"
+        expect /body/text == "Caught signal Segmentation fault (11)"
+    }
+    request '{"command":"stackTrace","arguments":{"threadId":1,"startFrame":0,"levels":20},"type":"request","seq":5}'
+    response {
+        expect /type == "response"
+        expect /command == stackTrace
+        expect /request_seq == 5
+        expect /success == true
+        expect /body/totalFrames == 1
+        
+        expect /body/stackFrames[0]/name == main
+        expect /body/stackFrames[0]/id == 0
+        expect /body/stackFrames[0]/line == 7
+        expect /body/stackFrames[0]/column == 0
+        expect /body/stackFrames[0]/source/name == test2.c
+        expect /body/stackFrames[0]/source/path == "$(path)/test2.c"
+        expect /body/stackFrames[0]/source/sourceReference == 0
+    }
+}
+
+case "Step back" {
+    request '{"command":"stepBack","arguments":{"threadId":1},"type":"request","seq":6}'
+    response {
+        expect /type == "response"
+        expect /command == stepBack
+        expect /request_seq == 6
+        expect /success == true
+    }
+    response {
+        expect /type == event
+        expect /event == stopped
+        expect /body/reason == step
+    }
+}
+
+case "Step forward once (just before crash)" {
+    request '{"command":"next","arguments":{"threadId":1},"type":"request","seq":7}'
+    response {
+        expect /type == "response"
+        expect /command == next
+        expect /request_seq == 7
+        expect /success == true
+    }
+    response {
+        expect /type == event
+        expect /event == stopped
+        expect /body/reason == step
+    }
+    request '{"command":"stackTrace","arguments":{"threadId":1,"startFrame":0,"levels":20},"type":"request","seq":8}'
+    response {
+        expect /type == "response"
+        expect /command == stackTrace
+        expect /request_seq == 8
+        expect /success == true
+        expect /body/totalFrames == 1
+        
+        expect /body/stackFrames[0]/name == main
+        expect /body/stackFrames[0]/id == 0
+        expect /body/stackFrames[0]/line == 7
+        expect /body/stackFrames[0]/column == 0
+        expect /body/stackFrames[0]/source/name == test2.c
+        expect /body/stackFrames[0]/source/path == "$(path)/test2.c"
+        expect /body/stackFrames[0]/source/sourceReference == 0
+    }
+}
+
+case "Step into crash" {
+    request '{"command":"next","arguments":{"threadId":1},"type":"request","seq":9}'
+    response {
+        expect /type == "response"
+        expect /command == next
+        expect /request_seq == 9
+        expect /success == true
+    }
+    response {
+        expect /type == event
+        expect /event == stopped
+        expect /body/reason == exception
+        expect /body/description == "Caught signal Segmentation fault (11)"
+        expect /body/text == "Caught signal Segmentation fault (11)"
+    }
+    request '{"command":"stackTrace","arguments":{"threadId":1,"startFrame":0,"levels":20},"type":"request","seq":10}'
+    response {
+        expect /type == "response"
+        expect /command == stackTrace
+        expect /request_seq == 10
+        expect /success == true
+        expect /body/totalFrames == 1
+        
+        expect /body/stackFrames[0]/name == main
+        expect /body/stackFrames[0]/id == 0
+        expect /body/stackFrames[0]/line == 7
+        expect /body/stackFrames[0]/column == 0
+        expect /body/stackFrames[0]/source/name == test2.c
+        expect /body/stackFrames[0]/source/path == "$(path)/test2.c"
+        expect /body/stackFrames[0]/source/sourceReference == 0
+    }
+}
+
+case "Disconnect" {
+    request '{"command":"disconnect","arguments":{"restart":false},"type":"request","seq":11}'
+    response {
+        expect /type == "response"
+        expect /command == disconnect
+        expect /request_seq == 11
+        expect /success == true
+    }
+}
+
+
+stop
+

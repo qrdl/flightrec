@@ -3,7 +3,7 @@ int baz(void) {
 }
 
 int foo(double bar) {
-    if (bar > 0)
+    if (bar > 0.2)
         return (int)(bar * bar);
     else
         return baz() * baz();

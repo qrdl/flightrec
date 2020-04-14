@@ -71,6 +71,7 @@ uint64_t    cur_line;
 int         cur_depth;
 int         signum; // non-zero if process ended with signal
 uint64_t    program_base_addr;
+int         stop_on_entry;
 
 char *source_path = NULL;
 
@@ -100,6 +101,15 @@ static void *global_vars_cursor = NULL;
  *
  **************************************************************************/
 int process_init(const JSON_OBJ *request, int fd) {
+    /* reset all globals */
+    cur_file = NULL;
+    cur_step = 0;
+    cur_line = 0;
+    cur_depth = 0;
+    signum = 0;
+    program_base_addr = 0;
+    stop_on_entry = 0;
+
     JSON_OBJ *rsp = JSON_NEW_OBJ();
     JSON_OBJ *body = JSON_NEW_OBJ_FIELD(rsp, "body");
 
@@ -194,7 +204,7 @@ int process_launch(const JSON_OBJ *request, int fd) {
     }
     source_path = strdup(source_path);  // need a copy because original becames unusable after JSON object released
 
-    int stop_on_entry = JSON_GET_BOOL_FIELD(args, "stopOnEntry");
+    stop_on_entry = JSON_GET_BOOL_FIELD(args, "stopOnEntry");
     if (JSON_OK != json_err) {
         stop_on_entry = 0;
     }
@@ -255,11 +265,6 @@ int process_launch(const JSON_OBJ *request, int fd) {
     DAB_CURSOR_FREE(cursor);
 
 cleanup:
-    /* request doesn't require to stop on entry, proceed to 'contnue' */
-    if (SUCCESS == ret && !stop_on_entry) {
-        JSON_RELEASE(rsp);
-        return process_continue(request, fd);
-    }
 
     response = build_response(request, rsp, ret, SUCCESS == ret ? NULL : error);
 
@@ -270,7 +275,9 @@ cleanup:
     }
     JSON_RELEASE(rsp);
 
-    if (SUCCESS == ret) {
+    /* if program ran without stopOnEntry flag, defer "execution" till receipt of configurationDone request,
+       when all breakpoints are already specified */
+    if (SUCCESS == ret && stop_on_entry) {
         event_stopped(fd, STOP_REASON_ENTRY);
     }
 
@@ -873,7 +880,7 @@ int process_breakpoints(const JSON_OBJ *request, int fd) {
             "SELECT "
                 " file_id, line "
             "FROM "
-                "main.statement "
+                "main.step "
             "WHERE "
                 "file_id = ? AND "
                 "line = ? "
@@ -971,7 +978,20 @@ int process_continue(const JSON_OBJ *request, int fd) {
         RETCLEAN(FAILURE);
     }
 
-    ret = DAB_CURSOR_FETCH(continue_cursor, &cur_file, &cur_line, &cur_step, &cur_depth);
+    uint64_t new_line, new_step;
+    char *new_file;
+    while (DAB_OK == (ret = DAB_CURSOR_FETCH(continue_cursor, &new_file, &new_line, &new_step, &cur_depth))) {
+        if (new_step == cur_step+1 && new_line == cur_line && !strcmp(cur_file, new_file)) {
+            /* hit the next statement on the same line - repeat */
+            cur_step = new_step;
+            continue;
+        }
+        cur_step = new_step;
+        cur_line = new_line;
+        cur_file = new_file;
+        break;
+    }
+    
     if (DAB_NO_DATA == ret) {
         ret = set_last_step(&error);
         /* if program stopped due to signal, set appropriate stop reason */
@@ -1052,7 +1072,20 @@ int process_revcontinue(const JSON_OBJ *request, int fd) {
         RETCLEAN(FAILURE);
     }
 
-    ret = DAB_CURSOR_FETCH(revcontinue_cursor, &cur_file, &cur_line, &cur_step, &cur_depth);
+    uint64_t new_line, new_step;
+    char *new_file;
+    while (DAB_OK == (ret = DAB_CURSOR_FETCH(revcontinue_cursor, &new_file, &new_line, &new_step, &cur_depth))) {
+        if (new_step == cur_step-1 && new_line == cur_line && !strcmp(cur_file, new_file)) {
+            /* hit the prev statement on the same line - repeat */
+            cur_step = new_step;
+            continue;
+        }
+        cur_step = new_step;
+        cur_line = new_line;
+        cur_file = new_file;
+        break;
+    }
+
     if (DAB_NO_DATA == ret) {
         stop_reason = STOP_REASON_ENTRY;
         ret = set_first_step(&error);
@@ -1313,6 +1346,35 @@ cleanup:
     JSON_RELEASE(rsp);
 
     return ret;
+}
+
+
+/**************************************************************************
+ *
+ *  Function:   process_config_done
+ *
+ *  Params:     request - JSON request
+ *              fd - descriptior to send response to
+ *
+ *  Return:     SUCCESS / FAILURE
+ *
+ *  Descr:      Acknowledge the request, continue execution if stopOnEntry
+ *              not set
+ *
+ *  Note:       DAP protocol allows to specify breakpoints only after
+ *              'launch' command, it meqans debug server doesn't know about
+ *              breakpoints at launch and cannot stop on them.
+ *              Therefore if user ran the program without stopOnEntry,
+ *              delay program run till receipt of configurationDone event
+ *              which is sent AFTER setBreakpoints
+ *
+ **************************************************************************/
+int process_config_done(const JSON_OBJ *request, int fd) {
+    if (!stop_on_entry) {
+        return process_continue(request, fd);
+    }
+
+    return just_ack(request, fd);
 }
 
 

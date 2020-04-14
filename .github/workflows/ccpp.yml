@@ -26,8 +26,6 @@ jobs:
         sudo npm install vsce -g
     - name: make
       run: make
-    - name: prepare for test
-      run: cd test && make prepare
     - name: run tests
       run: cd test && make run
     - name: Record artifact

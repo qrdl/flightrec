@@ -26,8 +26,8 @@ case "Next from first line" {
         expect /body/stackFrames[0]/id == 0
         expect /body/stackFrames[0]/line == 30
         expect /body/stackFrames[0]/column == 0
-        expect /body/stackFrames[0]/source/name == a.c
-        expect /body/stackFrames[0]/source/path == "$(path)/a.c"
+        expect /body/stackFrames[0]/source/name == test1_a.c
+        expect /body/stackFrames[0]/source/path == "$(path)/test1_a.c"
         expect /body/stackFrames[0]/source/sourceReference == 0
     }
 }
@@ -57,16 +57,16 @@ case "Step into function" {
         expect /body/stackFrames[0]/id == 0
         expect /body/stackFrames[0]/line == 22
         expect /body/stackFrames[0]/column == 0
-        expect /body/stackFrames[0]/source/name == a.c
-        expect /body/stackFrames[0]/source/path == "$(path)/a.c"
+        expect /body/stackFrames[0]/source/name == test1_a.c
+        expect /body/stackFrames[0]/source/path == "$(path)/test1_a.c"
         expect /body/stackFrames[0]/source/sourceReference == 0
 
         expect /body/stackFrames[1]/name == main
         expect /body/stackFrames[1]/id == 1
         expect /body/stackFrames[1]/line == 30
         expect /body/stackFrames[1]/column == 0
-        expect /body/stackFrames[1]/source/name == a.c
-        expect /body/stackFrames[1]/source/path == "$(path)/a.c"
+        expect /body/stackFrames[1]/source/name == test1_a.c
+        expect /body/stackFrames[1]/source/path == "$(path)/test1_a.c"
         expect /body/stackFrames[1]/source/sourceReference == 0
     }
 }
@@ -96,16 +96,16 @@ case "Step in - next line" {
         expect /body/stackFrames[0]/id == 0
         expect /body/stackFrames[0]/line == 23  # changed
         expect /body/stackFrames[0]/column == 0
-        expect /body/stackFrames[0]/source/name == a.c
-        expect /body/stackFrames[0]/source/path == "$(path)/a.c"
+        expect /body/stackFrames[0]/source/name == test1_a.c
+        expect /body/stackFrames[0]/source/path == "$(path)/test1_a.c"
         expect /body/stackFrames[0]/source/sourceReference == 0
 
         expect /body/stackFrames[1]/name == main
         expect /body/stackFrames[1]/id == 1
         expect /body/stackFrames[1]/line == 30
         expect /body/stackFrames[1]/column == 0
-        expect /body/stackFrames[1]/source/name == a.c
-        expect /body/stackFrames[1]/source/path == "$(path)/a.c"
+        expect /body/stackFrames[1]/source/name == test1_a.c
+        expect /body/stackFrames[1]/source/path == "$(path)/test1_a.c"
         expect /body/stackFrames[1]/source/sourceReference == 0
     }
 }
@@ -135,24 +135,24 @@ case "Step into function in different unit" {
         expect /body/stackFrames[0]/id == 0
         expect /body/stackFrames[0]/line == 5
         expect /body/stackFrames[0]/column == 0
-        expect /body/stackFrames[0]/source/name == b.c
-        expect /body/stackFrames[0]/source/path == "$(path)/b.c"
+        expect /body/stackFrames[0]/source/name == test1_b.c
+        expect /body/stackFrames[0]/source/path == "$(path)/test1_b.c"
         expect /body/stackFrames[0]/source/sourceReference == 0
 
         expect /body/stackFrames[1]/name == a
         expect /body/stackFrames[1]/id == 1
         expect /body/stackFrames[1]/line == 23  # changed
         expect /body/stackFrames[1]/column == 0
-        expect /body/stackFrames[1]/source/name == a.c
-        expect /body/stackFrames[1]/source/path == "$(path)/a.c"
+        expect /body/stackFrames[1]/source/name == test1_a.c
+        expect /body/stackFrames[1]/source/path == "$(path)/test1_a.c"
         expect /body/stackFrames[1]/source/sourceReference == 0
 
         expect /body/stackFrames[2]/name == main
         expect /body/stackFrames[2]/id == 2
         expect /body/stackFrames[2]/line == 30
         expect /body/stackFrames[2]/column == 0
-        expect /body/stackFrames[2]/source/name == a.c
-        expect /body/stackFrames[2]/source/path == "$(path)/a.c"
+        expect /body/stackFrames[2]/source/name == test1_a.c
+        expect /body/stackFrames[2]/source/path == "$(path)/test1_a.c"
         expect /body/stackFrames[2]/source/sourceReference == 0
     }
 }
@@ -182,24 +182,24 @@ case "Next" {
         expect /body/stackFrames[0]/id == 0
         expect /body/stackFrames[0]/line == 6   # changed
         expect /body/stackFrames[0]/column == 0
-        expect /body/stackFrames[0]/source/name == b.c
-        expect /body/stackFrames[0]/source/path == "$(path)/b.c"
+        expect /body/stackFrames[0]/source/name == test1_b.c
+        expect /body/stackFrames[0]/source/path == "$(path)/test1_b.c"
         expect /body/stackFrames[0]/source/sourceReference == 0
 
         expect /body/stackFrames[1]/name == a
         expect /body/stackFrames[1]/id == 1
         expect /body/stackFrames[1]/line == 23  # changed
         expect /body/stackFrames[1]/column == 0
-        expect /body/stackFrames[1]/source/name == a.c
-        expect /body/stackFrames[1]/source/path == "$(path)/a.c"
+        expect /body/stackFrames[1]/source/name == test1_a.c
+        expect /body/stackFrames[1]/source/path == "$(path)/test1_a.c"
         expect /body/stackFrames[1]/source/sourceReference == 0
 
         expect /body/stackFrames[2]/name == main
         expect /body/stackFrames[2]/id == 2
         expect /body/stackFrames[2]/line == 30
         expect /body/stackFrames[2]/column == 0
-        expect /body/stackFrames[2]/source/name == a.c
-        expect /body/stackFrames[2]/source/path == "$(path)/a.c"
+        expect /body/stackFrames[2]/source/name == test1_a.c
+        expect /body/stackFrames[2]/source/path == "$(path)/test1_a.c"
         expect /body/stackFrames[2]/source/sourceReference == 0
     }
 }
@@ -229,16 +229,16 @@ case "Step out" {
         expect /body/stackFrames[0]/id == 0
         expect /body/stackFrames[0]/line == 24
         expect /body/stackFrames[0]/column == 0
-        expect /body/stackFrames[0]/source/name == a.c
-        expect /body/stackFrames[0]/source/path == "$(path)/a.c"
+        expect /body/stackFrames[0]/source/name == test1_a.c
+        expect /body/stackFrames[0]/source/path == "$(path)/test1_a.c"
         expect /body/stackFrames[0]/source/sourceReference == 0
 
         expect /body/stackFrames[1]/name == main
         expect /body/stackFrames[1]/id == 1
         expect /body/stackFrames[1]/line == 30
         expect /body/stackFrames[1]/column == 0
-        expect /body/stackFrames[1]/source/name == a.c
-        expect /body/stackFrames[1]/source/path == "$(path)/a.c"
+        expect /body/stackFrames[1]/source/name == test1_a.c
+        expect /body/stackFrames[1]/source/path == "$(path)/test1_a.c"
         expect /body/stackFrames[1]/source/sourceReference == 0
     }
 }
@@ -268,16 +268,16 @@ case "Next (step over function call)" {
         expect /body/stackFrames[0]/id == 0
         expect /body/stackFrames[0]/line == 25
         expect /body/stackFrames[0]/column == 0
-        expect /body/stackFrames[0]/source/name == a.c
-        expect /body/stackFrames[0]/source/path == "$(path)/a.c"
+        expect /body/stackFrames[0]/source/name == test1_a.c
+        expect /body/stackFrames[0]/source/path == "$(path)/test1_a.c"
         expect /body/stackFrames[0]/source/sourceReference == 0
 
         expect /body/stackFrames[1]/name == main
         expect /body/stackFrames[1]/id == 1
         expect /body/stackFrames[1]/line == 30
         expect /body/stackFrames[1]/column == 0
-        expect /body/stackFrames[1]/source/name == a.c
-        expect /body/stackFrames[1]/source/path == "$(path)/a.c"
+        expect /body/stackFrames[1]/source/name == test1_a.c
+        expect /body/stackFrames[1]/source/path == "$(path)/test1_a.c"
         expect /body/stackFrames[1]/source/sourceReference == 0
     }
 }
@@ -307,16 +307,16 @@ case "Step in (no function call, equivalent to next)" {
         expect /body/stackFrames[0]/id == 0
         expect /body/stackFrames[0]/line == 26
         expect /body/stackFrames[0]/column == 0
-        expect /body/stackFrames[0]/source/name == a.c
-        expect /body/stackFrames[0]/source/path == "$(path)/a.c"
+        expect /body/stackFrames[0]/source/name == test1_a.c
+        expect /body/stackFrames[0]/source/path == "$(path)/test1_a.c"
         expect /body/stackFrames[0]/source/sourceReference == 0
 
         expect /body/stackFrames[1]/name == main
         expect /body/stackFrames[1]/id == 1
         expect /body/stackFrames[1]/line == 30
         expect /body/stackFrames[1]/column == 0
-        expect /body/stackFrames[1]/source/name == a.c
-        expect /body/stackFrames[1]/source/path == "$(path)/a.c"
+        expect /body/stackFrames[1]/source/name == test1_a.c
+        expect /body/stackFrames[1]/source/path == "$(path)/test1_a.c"
         expect /body/stackFrames[1]/source/sourceReference == 0
     }
 }
@@ -346,16 +346,16 @@ case "Step back one line" {
         expect /body/stackFrames[0]/id == 0
         expect /body/stackFrames[0]/line == 25
         expect /body/stackFrames[0]/column == 0
-        expect /body/stackFrames[0]/source/name == a.c
-        expect /body/stackFrames[0]/source/path == "$(path)/a.c"
+        expect /body/stackFrames[0]/source/name == test1_a.c
+        expect /body/stackFrames[0]/source/path == "$(path)/test1_a.c"
         expect /body/stackFrames[0]/source/sourceReference == 0
 
         expect /body/stackFrames[1]/name == main
         expect /body/stackFrames[1]/id == 1
         expect /body/stackFrames[1]/line == 30
         expect /body/stackFrames[1]/column == 0
-        expect /body/stackFrames[1]/source/name == a.c
-        expect /body/stackFrames[1]/source/path == "$(path)/a.c"
+        expect /body/stackFrames[1]/source/name == test1_a.c
+        expect /body/stackFrames[1]/source/path == "$(path)/test1_a.c"
         expect /body/stackFrames[1]/source/sourceReference == 0
     }
 }
@@ -385,16 +385,16 @@ case "Step back over function call" {
         expect /body/stackFrames[0]/id == 0
         expect /body/stackFrames[0]/line == 24
         expect /body/stackFrames[0]/column == 0
-        expect /body/stackFrames[0]/source/name == a.c
-        expect /body/stackFrames[0]/source/path == "$(path)/a.c"
+        expect /body/stackFrames[0]/source/name == test1_a.c
+        expect /body/stackFrames[0]/source/path == "$(path)/test1_a.c"
         expect /body/stackFrames[0]/source/sourceReference == 0
 
         expect /body/stackFrames[1]/name == main
         expect /body/stackFrames[1]/id == 1
         expect /body/stackFrames[1]/line == 30
         expect /body/stackFrames[1]/column == 0
-        expect /body/stackFrames[1]/source/name == a.c
-        expect /body/stackFrames[1]/source/path == "$(path)/a.c"
+        expect /body/stackFrames[1]/source/name == test1_a.c
+        expect /body/stackFrames[1]/source/path == "$(path)/test1_a.c"
         expect /body/stackFrames[1]/source/sourceReference == 0
     }
 }
@@ -424,8 +424,8 @@ case "Step out to main" {
         expect /body/stackFrames[0]/id == 0
         # expect /body/stackFrames[0]/line == 31
         expect /body/stackFrames[0]/column == 0
-        expect /body/stackFrames[0]/source/name == a.c
-        expect /body/stackFrames[0]/source/path == "$(path)/a.c"
+        expect /body/stackFrames[0]/source/name == test1_a.c
+        expect /body/stackFrames[0]/source/path == "$(path)/test1_a.c"
         expect /body/stackFrames[0]/source/sourceReference == 0
     }
 }
@@ -455,8 +455,8 @@ case "Reverse continue (to start)" {
         expect /body/stackFrames[0]/id == 0
         expect /body/stackFrames[0]/line == 29
         expect /body/stackFrames[0]/column == 0
-        expect /body/stackFrames[0]/source/name == a.c
-        expect /body/stackFrames[0]/source/path == "$(path)/a.c"
+        expect /body/stackFrames[0]/source/name == test1_a.c
+        expect /body/stackFrames[0]/source/path == "$(path)/test1_a.c"
         expect /body/stackFrames[0]/source/sourceReference == 0
     }
 }
@@ -484,10 +484,10 @@ case "Continue (to end)" {
         
         expect /body/stackFrames[0]/name == main
         expect /body/stackFrames[0]/id == 0
-        expect /body/stackFrames[0]/line == 54
+        expect /body/stackFrames[0]/line == 58
         expect /body/stackFrames[0]/column == 0
-        expect /body/stackFrames[0]/source/name == a.c
-        expect /body/stackFrames[0]/source/path == "$(path)/a.c"
+        expect /body/stackFrames[0]/source/name == test1_a.c
+        expect /body/stackFrames[0]/source/path == "$(path)/test1_a.c"
         expect /body/stackFrames[0]/source/sourceReference == 0
     }
 }
@@ -506,4 +506,15 @@ case "Next (terminate)" {
     }
 }
 
+case "Disconnect" {
+    request '{"command":"disconnect","arguments":{"restart":false},"type":"request","seq":35}'
+    response {
+        expect /type == "response"
+        expect /command == disconnect
+        expect /request_seq == 35
+        expect /success == true
+    }
+}
+
 stop
+

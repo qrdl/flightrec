@@ -354,7 +354,7 @@ int process_breakpoint(pid_t pid) {
         return FAILURE;
     }
 
-    if (func_id != old_func_id) {
+    if (func_id != old_func_id || FUNC_FLAG_START == func_flag) {
         if (FUNC_FLAG_START == func_flag) {
             depth++;        // got to the begining of the function - new function call
         }

@@ -143,6 +143,7 @@ int stop(char **error) {
     close(child_out);
     close(child_in);
     kill(child, SIGTERM);
+    child = 0;
     return SUCCESS;
 }
 

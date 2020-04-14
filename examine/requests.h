@@ -66,6 +66,7 @@ int process_continue(const JSON_OBJ *request, int fd);
 int process_revcontinue(const JSON_OBJ *request, int fd);
 int process_variables(const JSON_OBJ *request, int fd);
 int process_evaluate(const JSON_OBJ *request, int fd);
+int process_config_done(const JSON_OBJ *request, int fd);
 int just_ack(const JSON_OBJ *request, int fd);
 
 #endif
