@@ -1,6 +1,6 @@
 # Flight recorder
 
-![CI/CD](https://github.com/qrdl/flightrec/workflows/CI/CD/badge.svg?branch=master)
+![Build/Test](https://github.com/qrdl/flightrec/workflows/Build/Test/badge.svg?branch=master)
 [![Language grade: C/C++](https://img.shields.io/lgtm/grade/cpp/g/qrdl/flightrec.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/qrdl/flightrec/context:cpp)
 
 ## Description
@@ -29,14 +29,14 @@ For now Flightrec supports only client binaries, compiled from C using GCC compi
 Flightrec supports only ELF client binaries with DWARF2 debug information. There are plans to support DWARF4/5 debug formats as well.
 
 ### Optimisation
-With high optimisation settings GCC may create complex locations for variables, such as "first 8 bytes in register, reminder in memory at certain address", and it is not supported by Flightrec yet.
+With high optimisation settings GCC may create complex locations for variables, such as "first 8 bytes in register, reminder in memory at certain address", and it is not supported by Flightrec.
 Therefore is recommended to compile client without optimisation.
 
 ### Memory management
 Flightrec intercepts calls to `malloc`/`free` family of functions in order to monitor memory changes, therefore if client uses its own memory management by directly doing syscalls, Flightrec is unable to detect it.
 
 ### Threads
-Although Flightrec is multi-threaded application, it doesn't support multi-threaded clients, it means that only main thread of the client is analysed. There are plans to add multi-threading support into Flightrec.
+Although Flightrec is multi-threaded application, it doesn't support multi-threaded clients, it means that only main thread of the client is analysed. There are plans to support multi-threaded clients in the future.
 
 ## Pre-requisites
 

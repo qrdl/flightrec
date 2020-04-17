@@ -11,8 +11,8 @@ examine/cmd_hash.c
 .vscode/settings.json
 core
 *.log
-test/test
-test/test.dump
+test/test[0-9]*
+test/tester
 y.tab.c
 y.tab.h
 lex.yy.c

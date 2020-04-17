@@ -57,6 +57,7 @@ void *ref_upsert;
 void *heap_cursor;
 void *func_cursor;
 void *type_name_cursor;
+void *enum_cursor;
 
 /* DWARF uses its own register numbering scheme.
    See https://www.uclibc.org/docs/psABI-x86_64.pdf fig 3.36 for DWARF - x86_64 register mapping */
@@ -645,7 +646,7 @@ int add_var_entry(JSON_OBJ *container, int parent_type, ULONG parent, char *name
     JSON_NEW_STRING_FIELD(item, "name", name);
 
     /* format variable value for basic types */
-    char new_val[32];
+    char new_val[64];
     ULONG ref;
     ULONG pointer_size = 0;
     ULONG dummy;
@@ -659,7 +660,8 @@ int add_var_entry(JSON_OBJ *container, int parent_type, ULONG parent, char *name
         flags = TKIND_POINTER;
     }
     switch (flags & TKIND_TYPE) {
-        case TKIND_STRUCT:
+        case TKIND_STRUCT:  /* FALLTHROUGH */
+        case TKIND_UNION:
             /* process compound variable by adding the reference to it so client can query its internal structure
                 in separate request */
             if (SUCCESS != get_var_ref(parent_type, parent, name, addr, type, 0, &ref)) {
@@ -851,6 +853,51 @@ int add_var_entry(JSON_OBJ *container, int parent_type, ULONG parent, char *name
                     strcpy(new_val, "unsupported");
                     break;
             }
+            break;
+        case TKIND_ENUM:
+            mem = get_var_value(addr, size, cur_step);
+            if (!mem) {
+                RETCLEAN(FAILURE);
+            }
+            uint32_t value;
+            switch (size) {                
+                case 1:
+                    value = *(uint8_t *)mem;
+                    break;
+                case 2:
+                    value = *(uint16_t *)mem;
+                    break;
+                case 4:
+                    value = *(uint32_t *)mem;
+                    break;
+                default:
+                    ERR("Unsupported %" PRId64 "-byte long integer var %s", size, name);
+                    strcpy(new_val, "unsupported");
+                    break;
+            }
+            /* lookup enum item name by value */
+            if (!enum_cursor) {
+                if (DAB_OK != DAB_CURSOR_OPEN(&enum_cursor,
+                    "SELECT "
+                        "name "
+                    "FROM "
+                        "member "
+                    "WHERE "
+                        "offset = ? AND "
+                        "value = ?",
+                        type, value
+                )) {
+                    return FAILURE;
+                }
+            } else if (DAB_OK != DAB_CURSOR_RESET(enum_cursor) || DAB_OK != DAB_CURSOR_BIND(enum_cursor, type, value)) {
+                return FAILURE;
+            }
+            char *name;
+            if (DAB_OK != DAB_CURSOR_FETCH(enum_cursor, &name)) {
+                sprintf(new_val, "%" PRIu32, value);
+            } else {
+                sprintf(new_val, "%s (%" PRIu32 ")", name, value);
+            }          
             break;
         default:
             ERR("Type %" PRIu64 " not implemented yet", flags & TKIND_TYPE);
