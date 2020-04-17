@@ -892,11 +892,11 @@ int add_var_entry(JSON_OBJ *container, int parent_type, ULONG parent, char *name
             } else if (DAB_OK != DAB_CURSOR_RESET(enum_cursor) || DAB_OK != DAB_CURSOR_BIND(enum_cursor, type, value)) {
                 return FAILURE;
             }
-            char *name;
-            if (DAB_OK != DAB_CURSOR_FETCH(enum_cursor, &name)) {
+            char *item_name;
+            if (DAB_OK != DAB_CURSOR_FETCH(enum_cursor, &item_name)) {
                 sprintf(new_val, "%" PRIu32, value);
             } else {
-                sprintf(new_val, "%s (%" PRIu32 ")", name, value);
+                sprintf(new_val, "%s (%" PRIu32 ")", item_name, value);
             }          
             break;
         default:
