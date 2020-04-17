@@ -78,6 +78,7 @@ extern void *ref_upsert;
 extern void *heap_cursor;
 extern void *func_cursor;
 extern void *type_name_cursor;
+extern void *enum_cursor;
 
 #endif
 

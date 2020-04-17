@@ -4,7 +4,7 @@ CFLAGS := -g3 -gdwarf-2 -O0
 
 ##### test binaries
 
-TESTBINS = test1 test2
+TESTBINS = test1 test2 test3
 
 all: $(TESTBINS) tester
 

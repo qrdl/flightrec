@@ -141,6 +141,7 @@ int create_db(void) {
                                 "name       VARCHAR(255), "
                                 "type       INTEGER, "              // ref type.offset - member type
                                 "start      INTEGER, "
+                                "value      INTEGER DEFAULT 0, "    // for enum items
                                 "PRIMARY KEY (unit_id, offset, name)"
                             ")")) {
         return FAILURE;
@@ -439,8 +440,8 @@ int prepare_statements(void) {
 
     if (DAB_OK != DAB_CURSOR_PREPARE(&insert_member, "INSERT "
             "INTO member "
-            "(unit_id, offset, name, type, start) VALUES "
-            "(?,       ?,      ?,    ?,    ?)")) {
+            "(unit_id, offset, name, type, start, value) VALUES "
+            "(?,       ?,      ?,    ?,    ?,     ?)")) {
         return FAILURE;
     }
 

@@ -75,6 +75,7 @@ static int proc_custom_type(Dwarf_Debug dbg, Dwarf_Die die, Dwarf_Half tag, ULON
 static int proc_array_type(Dwarf_Debug dbg, Dwarf_Die parent_die, ULONG unit_id);
 static int proc_aggr_type(Dwarf_Debug dbg, Dwarf_Die parent_die, Dwarf_Half tag, ULONG unit_id);
 static int proc_aggr_member(Dwarf_Debug dbg, Dwarf_Die parent_die, ULONG unit_id, Dwarf_Off offset);
+static int proc_enum_item(Dwarf_Debug dbg, Dwarf_Die parent_die, ULONG unit_id, Dwarf_Off offset);
 static int proc_var(Dwarf_Debug dbg, Dwarf_Die die, ULONG scope_id, ULONG unit_id);
 
 
@@ -998,7 +999,9 @@ int proc_aggr_type(Dwarf_Debug dbg, Dwarf_Die parent_die, Dwarf_Half tag, ULONG 
                 }
                 break;
             case DW_TAG_enumerator: {
-                // do not process enumerators
+                if (SUCCESS != proc_enum_item(dbg, die, unit_id, offset)) {
+                    RETCLEAN(FAILURE);
+                }
                 break;
             }
             default:
@@ -1056,7 +1059,43 @@ int proc_aggr_member(Dwarf_Debug dbg, Dwarf_Die parent_die, ULONG unit_id, Dwarf
         RETCLEAN(FAILURE);
     }
 
-    CURSOR_EXEC(insert_member, unit_id, (ULLONG)offset, name, (ULLONG)typeref, start);
+    CURSOR_EXEC(insert_member, unit_id, (ULLONG)offset, name, (ULLONG)typeref, start, 0);
+
+cleanup:
+    cleanup_attrs(dbg, attr_list);
+
+    return ret;
+}
+
+
+/**************************************************************************
+ *
+ *  Function:   proc_enum_item
+ *
+ *  Params:     dbg - debug handle
+ *              die - debug info entry for type
+ *              unit_id - unit ID
+ *              offset - offset of parent aggregate type
+ *
+ *  Return:     SUCCESS / FAILURE
+ *
+ *  Descr:      Process enumarate item
+ *
+ **************************************************************************/
+int proc_enum_item(Dwarf_Debug dbg, Dwarf_Die parent_die, ULONG unit_id, Dwarf_Off offset) {
+    int             ret = SUCCESS;
+    char            *name = NULL;
+    long            value = 0;
+    ATTR_LIST(
+        ATTR(DW_AT_name,           &name),
+        ATTR(DW_AT_const_value,    &value)
+    );
+
+    if (SUCCESS != get_attrs(dbg, parent_die, attr_list)) {
+        RETCLEAN(FAILURE);
+    }
+
+    CURSOR_EXEC(insert_member, unit_id, (ULLONG)offset, name, 0, 0, value);
 
 cleanup:
     cleanup_attrs(dbg, attr_list);

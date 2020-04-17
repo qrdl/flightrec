@@ -1,15 +1,16 @@
-name: CI/CD
+name: Build/Test
 
 on: [push]
 
 jobs:
   build:
-
+    name: Build and test
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v2
-    - name: install latest json-c
+    - name: Checkout
+      uses: actions/checkout@v2
+    - name: Install json-c 0.13
       run: |
         git clone https://github.com/json-c/json-c.git
         cd json-c
@@ -19,26 +20,26 @@ jobs:
         make
         sudo make install
         cd ..
-    - name: install other dependencies
+    - name: Install other dependencies
       run: |
         sudo apt-get update
         sudo apt-get install -y libdwarf-dev libelf-dev libsqlite3-dev gperf nodejs npm bison flex
         sudo npm install vsce -g
-    - name: make
+    - name: Make everything
       run: make
-    - name: run tests
+    - name: Run tests
       run: cd test && make run
-    - name: Record artifact
+    - name: Save Record artifact
       uses: actions/upload-artifact@v1
       with:
         name: record
         path: fr_record
-    - name: Preload artifact
+    - name: Save Preload artifact
       uses: actions/upload-artifact@v1
       with:
         name: preload
         path: fr_preload.so
-    - name: VS Code extension artifact
+    - name: Save VS Code extension artifact
       uses: actions/upload-artifact@v1
       with:
         name: vscode_extension
