@@ -223,7 +223,7 @@ int get_var_address(uint64_t var_id, uint64_t step, char **name, uint64_t *addre
     struct sr *registers = sr_new("", sizeof(struct user_regs_struct) + 1);
     if (DAB_OK != DAB_CURSOR_FETCH(step_cursor, registers)) {
         ERR("Cannot find registers for step %" PRIu64, step);
-        return FAILURE;
+        RETCLEAN(FAILURE);
     }
     struct user_regs_struct regs;
     memcpy(&regs, CSTR(registers), sizeof(regs));
@@ -271,6 +271,7 @@ int get_var_address(uint64_t var_id, uint64_t step, char **name, uint64_t *addre
     *address = (uint64_t)addr;
 
 cleanup:
+    STRFREE(registers);
     if (err) {
         dwarf_dealloc(dbg, err, DW_DLA_ERROR);
     }
@@ -859,7 +860,8 @@ int add_var_entry(JSON_OBJ *container, int parent_type, ULONG parent, char *name
             if (!mem) {
                 RETCLEAN(FAILURE);
             }
-            uint32_t value;
+            uint32_t value = 0;
+            new_val[0] = '\0';
             switch (size) {                
                 case 1:
                     value = *(uint8_t *)mem;
@@ -871,9 +873,12 @@ int add_var_entry(JSON_OBJ *container, int parent_type, ULONG parent, char *name
                     value = *(uint32_t *)mem;
                     break;
                 default:
-                    ERR("Unsupported %" PRId64 "-byte long integer var %s", size, name);
+                    ERR("Unsupported %" PRId64 "-byte long enum %s", size, name);
                     strcpy(new_val, "unsupported");
                     break;
+            }
+            if (new_val[0]) {
+                break;
             }
             /* lookup enum item name by value */
             if (!enum_cursor) {
@@ -887,10 +892,12 @@ int add_var_entry(JSON_OBJ *container, int parent_type, ULONG parent, char *name
                         "value = ?",
                         type, value
                 )) {
-                    return FAILURE;
+                    free(mem);
+                    RETCLEAN(FAILURE);
                 }
             } else if (DAB_OK != DAB_CURSOR_RESET(enum_cursor) || DAB_OK != DAB_CURSOR_BIND(enum_cursor, type, value)) {
-                return FAILURE;
+                free(mem);
+                RETCLEAN(FAILURE);
             }
             char *item_name;
             if (DAB_OK != DAB_CURSOR_FETCH(enum_cursor, &item_name)) {

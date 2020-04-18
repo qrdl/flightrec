@@ -99,7 +99,7 @@ int main(int argc, char *argv[]) {
     for (;;) {
         if (port) {
             client = accept(listener, NULL, NULL);
-            if (!client) {
+            if (client < 0) {
                 ERR("Error accepting connection - %s", strerror(errno));
                 return FAILURE;
             }
@@ -108,6 +108,7 @@ int main(int argc, char *argv[]) {
         } else {
             read_fd = 0;    // read from stdin
             write_fd = 1;   // write to stdout
+            client = 0;
         }
         char *message;
 

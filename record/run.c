@@ -389,6 +389,7 @@ int process_breakpoint(pid_t pid) {
             // if new address doesn't fall into known ranges, re-read memory map
             if (!mem_in_cache(event.address, event.size)) {
                 if (SUCCESS != mem_read_regions()) {
+                    free(msg);
                     return FAILURE;
                 }
             }

@@ -67,7 +67,7 @@ int init_comms(char *port) {
     }
 
     listener = socket(result->ai_family, result->ai_socktype, result->ai_protocol);
-    if (!listener) {
+    if (listener < 0) {
         ERR("Error creating the socket - %s", strerror(errno));
         freeaddrinfo(result);
         return FAILURE;
@@ -94,9 +94,9 @@ int init_comms(char *port) {
 
     struct sockaddr_in addr;
     socklen_t len = sizeof(struct sockaddr);
-    getsockname(listener, (struct sockaddr *)&addr, &len);
-
-    printf("Listening on port %d\n", ntohs(addr.sin_port));
+    if (!getsockname(listener, (struct sockaddr *)&addr, &len)) {
+        printf("Listening on port %d\n", ntohs(addr.sin_port));
+    }
 
     return SUCCESS;
 }

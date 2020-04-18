@@ -117,7 +117,7 @@ static int status = STATUS_OK;
 %define parse.lac full
 %define parse.error verbose
 
-%token START STOP CASE REQUEST RESPONSE EXPECT SET EQ NE MATCH NMATCH
+%token START STOP CASE REQUEST RESPONSE EXPECT SET EQ NE MATCH NMATCH LEN
 %token <value> INT FLOAT STRING
 
 %type <value> operand json_path
@@ -316,8 +316,17 @@ operand
                 break;
             default:
                 INVALID("Unsupported JSON data type as operand");
-                YYABORT;
         }
+    }
+    | LEN '(' json_path ')' {
+        if (json_type_array != JSON_GET_OBJECT_TYPE($3.json)) {
+            INVALID("Cannot get length for non-array object");
+        }
+        $$.op_type = OP_CONST;
+        $$.datatype = DATATYPE_INT;
+        char tmp[16];
+        snprintf(tmp, sizeof(tmp), "%lu", JSON_GET_ARRAY_SIZE($3.json));
+        $$.literal = strdup(tmp);
     }
     | STRING {
         $$ = $1;

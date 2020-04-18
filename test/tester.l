@@ -28,6 +28,7 @@ extern int lineno;
 "response"  { return RESPONSE; }
 "expect"    { return EXPECT; }
 "set"       { return SET; }
+"LENGTH"    { return LEN; }
 
 "=="        { return EQ; }
 "!="        { return NE; }
@@ -39,6 +40,8 @@ extern int lineno;
 "["         { return '['; }
 "]"         { return ']'; }
 "/"         { return '/'; }
+"("         { return '('; }
+")"         { return ')'; }
 
 [0-9]+      { yylval.value.literal = strdup(yytext); if (strchr(yytext, '.')) return FLOAT; else return INT;}
 
@@ -46,7 +49,7 @@ extern int lineno;
 \'(\\.|[^\\'\n])*\'     { yytext[strlen(yytext)-1] = '\0'; yylval.value.literal = process_literal(yytext+1); return STRING; }
 
 "#".*                   { /* comment - skip till the end of line */ }
-[^ 0-9\n\t\v\r\f/!=\[{][^ \n\t\v\r\f/!=\[{]*   { yylval.value.literal = process_literal(yytext); return STRING; }
+[^ 0-9\n\t\v\r\f/!=\[{()][^ \n\t\v\r\f/!=\[{()]*   { yylval.value.literal = process_literal(yytext); return STRING; }
 
 "\n"                    { lineno++; }
 {S}                     { /* do nothing */ }
@@ -158,10 +161,10 @@ char *process_literal(char *source) {
                 if (tmp) {
                     result = tmp;
                 }
-                strcpy(result+i, value);
-                cur = tail;
-                i += val_len;
             }
+            strcpy(result+i, value);
+            cur = tail;
+            i += val_len;
         } else {
             result[i++] = *cur;
         }

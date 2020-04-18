@@ -2,6 +2,7 @@
 
 ![Build/Test](https://github.com/qrdl/flightrec/workflows/Build/Test/badge.svg?branch=master)
 [![Language grade: C/C++](https://img.shields.io/lgtm/grade/cpp/g/qrdl/flightrec.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/qrdl/flightrec/context:cpp)
+[![Coverity Scan](https://scan.coverity.com/projects/20876/badge.svg)](https://scan.coverity.com/projects/qrdl-flightrec)
 
 ## Description
 Flight Recorder (Flightrec for short) allows to record client program execution and examine it later. It consists of three building blocks:

@@ -176,7 +176,7 @@ int process_init(const JSON_OBJ *request, int fd) {
 int process_launch(const JSON_OBJ *request, int fd) {
     int ret = SUCCESS;
     JSON_OBJ *rsp = JSON_NEW_OBJ();
-    const char *error;
+    const char *error = NULL;
     const char *response;
 
     JSON_OBJ *args = JSON_GET_OBJ(request, "arguments");
@@ -299,8 +299,6 @@ cleanup:
  **************************************************************************/
 int process_threads(const JSON_OBJ *request, int fd) {
     JSON_OBJ *rsp = JSON_NEW_OBJ();
-    int ret = SUCCESS;
-    const char *error = NULL;
 
     // TODO: add real support for threads
     JSON_OBJ *threads = JSON_NEW_ARRAY_FIELD(JSON_NEW_OBJ_FIELD(rsp, "body"), "threads");
@@ -309,7 +307,7 @@ int process_threads(const JSON_OBJ *request, int fd) {
     JSON_NEW_INT32_FIELD(item, "id", 1);
     JSON_ADD_OBJ_ITEM(threads, item);
 
-    const char *response = build_response(request, rsp, ret, SUCCESS == ret ? NULL : error);
+    const char *response = build_response(request, rsp, SUCCESS, NULL);
     int err = send_message(fd, response);
     if (SUCCESS != err) {
         ERR("Cannot send response");
@@ -317,7 +315,7 @@ int process_threads(const JSON_OBJ *request, int fd) {
     }
     JSON_RELEASE(rsp);
 
-    return ret;
+    return SUCCESS;
 }
 
 
@@ -476,7 +474,7 @@ cleanup:
 int process_next(const JSON_OBJ *request, int fd) {
     JSON_OBJ *rsp = JSON_NEW_OBJ();
     int ret = SUCCESS;
-    const char *error;
+    const char *error = NULL;
     const char *response;
     int term = 0;
     int stop_reason;
@@ -561,7 +559,7 @@ cleanup:
 int process_stepin(const JSON_OBJ *request, int fd) {
     JSON_OBJ *rsp = JSON_NEW_OBJ();
     int ret = SUCCESS;
-    const char *error;
+    const char *error = NULL;
     const char *response;
     int term = 0;
     int stop_reason;
@@ -641,10 +639,10 @@ cleanup:
 int process_stepout(const JSON_OBJ *request, int fd) {
     JSON_OBJ *rsp = JSON_NEW_OBJ();
     int ret = SUCCESS;
-    const char *error;
+    const char *error = NULL;
     const char *response;
     int term = 0;
-    int stop_reason;
+    int stop_reason = 0;
 
     if (cur_depth <= 1) {   // do nothing - already at top level
         RETCLEAN(SUCCESS);
@@ -706,7 +704,7 @@ cleanup:
 
     if (term) {
         event_terminated(fd);
-    } else if (SUCCESS == ret) {
+    } else if (SUCCESS == ret && stop_reason) {
         event_stopped(fd, stop_reason);
     }
 
@@ -732,7 +730,7 @@ cleanup:
 int process_stepback(const JSON_OBJ *request, int fd) {
     JSON_OBJ *rsp = JSON_NEW_OBJ();
     int ret = SUCCESS;
-    const char *error;
+    const char *error = NULL;
     const char *response;
     int term = 0;
 
@@ -811,7 +809,7 @@ cleanup:
 int process_breakpoints(const JSON_OBJ *request, int fd) {
     JSON_OBJ *rsp = JSON_NEW_OBJ();
     int ret = SUCCESS;
-    const char *error;
+    const char *error = NULL;
     const char *response;
 
     // find source file
@@ -946,7 +944,7 @@ cleanup:
 int process_continue(const JSON_OBJ *request, int fd) {
     JSON_OBJ *rsp = JSON_NEW_OBJ();
     int ret = SUCCESS;
-    const char *error;
+    const char *error = NULL;
     const char *response;
     int stop_reason;
 
@@ -1131,7 +1129,7 @@ cleanup:
 int process_scopes(const JSON_OBJ *request, int fd) {
     JSON_OBJ *rsp = JSON_NEW_OBJ();
     int ret = SUCCESS;
-    const char *error;
+    const char *error = NULL;
     const char *response;
 
     int frame_id = JSON_GET_INT32_FIELD(JSON_GET_OBJ(request, "arguments"), "frameId");
@@ -1195,7 +1193,7 @@ cleanup:
 int process_variables(const JSON_OBJ *request, int fd) {
     JSON_OBJ *rsp = JSON_NEW_OBJ();
     int ret = SUCCESS;
-    const char *error;
+    const char *error = NULL;
     const char *response;
 
     JSON_OBJ *req = JSON_GET_OBJ(request, "arguments");
