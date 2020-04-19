@@ -1,0 +1,676 @@
+# Caller must set $(path)
+start "../examine/fr_examine"
+
+case "Init" {
+    request '{"command":"initialize","arguments":{"clientID":"tester","clientName":"Tester"},"type":"request","seq":1}'
+    # response
+    response {
+        # ignore init response
+    }
+    response {
+        # ignore init done event
+    }
+    request '{"command":"launch","arguments":{"request":"launch","program":"$(path)/test4","sourcePath":"$(path)","stopOnEntry":true},"type":"request","seq":2}'
+    # response
+    response {
+        expect /type == "response"
+        expect /command == launch
+        expect /request_seq == 2
+        expect /success == true
+    }
+    response {
+        expect /type == event
+        expect /event == stopped
+        expect /body/reason == entry
+    }
+    request '{"command":"setBreakpoints","arguments":{"source":{"name":"test4.c","path":"$(path)/test4.c"},"lines":[30],"breakpoints":[{"line":30}],"sourceModified":false},"type":"request","seq":3}'
+    response {
+        expect /type == "response"
+        expect /command == setBreakpoints
+        expect /request_seq == 3
+        expect /success == true
+
+        expect /body/breakpoints[0]/id == 1
+        expect /body/breakpoints[0]/verified == true
+    }
+    request '{"command":"configurationDone","type":"request","seq":4}'
+    response {
+        expect /type == "response"
+        expect /command == configurationDone
+        expect /request_seq == 4
+        expect /success == true
+    }
+}
+
+case "Get scopes" {
+    request '{"command":"stackTrace","arguments":{"threadId":1,"startFrame":0,"levels":20},"type":"request","seq":5}'
+    response {
+        expect /type == "response"
+        expect /command == stackTrace
+        expect /request_seq == 5
+        expect /success == true
+
+        expect /body/stackFrames[0]/name == main
+        expect /body/stackFrames[0]/id == 0
+        expect /body/stackFrames[0]/line == 16
+        expect /body/stackFrames[0]/column == 0
+        expect /body/stackFrames[0]/source/name == test4.c
+        expect /body/stackFrames[0]/source/path == "$(path)/test4.c"
+        expect /body/stackFrames[0]/source/sourceReference == 0
+
+    }
+    request '{"command":"scopes","arguments":{"frameId":0},"type":"request","seq":6}'
+    response {
+        expect /type == "response"
+        expect /command == scopes
+        expect /request_seq == 6
+        expect /success == true
+
+        expect /body/scopes[0]/name == Globals
+        set global_scope = /body/scopes[0]/variablesReference
+
+        expect /body/scopes[1]/name == Locals
+        set local_scope = /body/scopes[1]/variablesReference
+    }
+}
+
+case "Get globals" {
+    request '{"command":"variables","arguments":{"variablesReference":$(global_scope) },"type":"request","seq":7}'
+    response {
+        expect /type == "response"
+        expect /command == variables
+        expect /request_seq == 7
+        expect /success == true
+        expect LENGTH(/body/variables) == 8
+
+        expect /body/variables[0]/name == ug8
+        expect /body/variables[0]/variablesReference == 0
+        expect /body/variables[0]/value == 1
+
+        expect /body/variables[1]/name == ug16
+        expect /body/variables[1]/variablesReference == 0
+        expect /body/variables[1]/value == 2
+
+        expect /body/variables[2]/name == ug32
+        expect /body/variables[2]/variablesReference == 0
+        expect /body/variables[2]/value == 3
+
+        expect /body/variables[3]/name == ug64
+        expect /body/variables[3]/variablesReference == 0
+        expect /body/variables[3]/value == 4
+
+        expect /body/variables[4]/name == sg8
+        expect /body/variables[4]/variablesReference == 0
+        expect /body/variables[4]/value == -1
+
+        expect /body/variables[5]/name == sg16
+        expect /body/variables[5]/variablesReference == 0
+        expect /body/variables[5]/value == -2
+
+        expect /body/variables[6]/name == sg32
+        expect /body/variables[6]/variablesReference == 0
+        expect /body/variables[6]/value == -3
+
+        expect /body/variables[7]/name == sg64
+        expect /body/variables[7]/variablesReference == 0
+        expect /body/variables[7]/value == -4
+    }
+    # program stopped on entry, local variables aren't visible yet
+    request '{"command":"variables","arguments":{"variablesReference":$(local_scope) },"type":"request","seq":8}'
+    response {
+        expect /type == "response"
+        expect /command == variables
+        expect /request_seq == 8
+        expect /success == true
+        expect LENGTH(/body/variables) == 0
+    }
+}
+
+##### Now step line by line and read local variables as they appear
+
+case "Local unsigned 8-bit int" {
+    request '{"command":"next","arguments":{"threadId":1},"type":"request","seq":9}'
+    response {
+        # ignore response
+    }
+    response {
+        # ignore stop event
+    }
+    request '{"command":"next","arguments":{"threadId":1},"type":"request","seq":10}'
+    response {
+        # ignore response
+    }
+    response {
+        # ignore stop event
+    }
+    request '{"command":"stackTrace","arguments":{"threadId":1,"startFrame":0,"levels":20},"type":"request","seq":11}'
+    response {
+        # ignore response
+    }
+    request '{"command":"variables","arguments":{"variablesReference":$(local_scope) },"type":"request","seq":12}'
+    response {
+        expect /type == "response"
+        expect /command == variables
+        expect /request_seq == 12
+        expect /success == true
+        expect LENGTH(/body/variables) == 1
+
+        expect /body/variables[0]/name == ul8
+        expect /body/variables[0]/variablesReference == 0
+        expect /body/variables[0]/value == 2
+    }
+}
+
+case "Local unsigned 16-bit int" {
+    request '{"command":"next","arguments":{"threadId":1},"type":"request","seq":13}'
+    response {
+        # ignore response
+    }
+    response {
+        # ignore stop event
+    }
+    request '{"command":"stackTrace","arguments":{"threadId":1,"startFrame":0,"levels":20},"type":"request","seq":14}'
+    response {
+        # ignore response
+    }
+    request '{"command":"variables","arguments":{"variablesReference":$(local_scope) },"type":"request","seq":15}'
+    response {
+        expect /type == "response"
+        expect /command == variables
+        expect /request_seq == 15
+        expect /success == true
+        expect LENGTH(/body/variables) == 2
+
+        expect /body/variables[0]/name == ul8
+        expect /body/variables[0]/variablesReference == 0
+        expect /body/variables[0]/value == 2
+
+        expect /body/variables[1]/name == ul16
+        expect /body/variables[1]/variablesReference == 0
+        expect /body/variables[1]/value == 4
+    }
+}
+
+case "Local unsigned 32-bit int" {
+    request '{"command":"next","arguments":{"threadId":1},"type":"request","seq":16}'
+    response {
+        # ignore response
+    }
+    response {
+        # ignore stop event
+    }
+    request '{"command":"stackTrace","arguments":{"threadId":1,"startFrame":0,"levels":20},"type":"request","seq":17}'
+    response {
+        # ignore response
+    }
+    request '{"command":"variables","arguments":{"variablesReference":$(local_scope) },"type":"request","seq":18}'
+    response {
+        expect /type == "response"
+        expect /command == variables
+        expect /request_seq == 18
+        expect /success == true
+        expect LENGTH(/body/variables) == 3
+
+        expect /body/variables[0]/name == ul8
+        expect /body/variables[0]/variablesReference == 0
+        expect /body/variables[0]/value == 2
+
+        expect /body/variables[1]/name == ul16
+        expect /body/variables[1]/variablesReference == 0
+        expect /body/variables[1]/value == 4
+
+        expect /body/variables[2]/name == ul32
+        expect /body/variables[2]/variablesReference == 0
+        expect /body/variables[2]/value == 6
+    }
+}
+
+case "Local unsigned 64-bit int" {
+    request '{"command":"next","arguments":{"threadId":1},"type":"request","seq":19}'
+    response {
+        # ignore response
+    }
+    response {
+        # ignore stop event
+    }
+    request '{"command":"stackTrace","arguments":{"threadId":1,"startFrame":0,"levels":20},"type":"request","seq":20}'
+    response {
+        # ignore response
+    }
+    request '{"command":"variables","arguments":{"variablesReference":$(local_scope) },"type":"request","seq":21}'
+    response {
+        expect /type == "response"
+        expect /command == variables
+        expect /request_seq == 21
+        expect /success == true
+        expect LENGTH(/body/variables) == 4
+
+        expect /body/variables[0]/name == ul8
+        expect /body/variables[0]/variablesReference == 0
+        expect /body/variables[0]/value == 2
+
+        expect /body/variables[1]/name == ul16
+        expect /body/variables[1]/variablesReference == 0
+        expect /body/variables[1]/value == 4
+
+        expect /body/variables[2]/name == ul32
+        expect /body/variables[2]/variablesReference == 0
+        expect /body/variables[2]/value == 6
+
+        expect /body/variables[3]/name == ul64
+        expect /body/variables[3]/variablesReference == 0
+        expect /body/variables[3]/value == 8
+    }
+}
+
+case "Local signed 8-bit int" {
+    request '{"command":"next","arguments":{"threadId":1},"type":"request","seq":22}'
+    response {
+        # ignore response
+    }
+    response {
+        # ignore stop event
+    }
+    request '{"command":"stackTrace","arguments":{"threadId":1,"startFrame":0,"levels":20},"type":"request","seq":23}'
+    response {
+        # ignore response
+    }
+    request '{"command":"variables","arguments":{"variablesReference":$(local_scope) },"type":"request","seq":24}'
+    response {
+        expect /type == "response"
+        expect /command == variables
+        expect /request_seq == 24
+        expect /success == true
+        expect LENGTH(/body/variables) == 5
+
+        expect /body/variables[0]/name == ul8
+        expect /body/variables[0]/variablesReference == 0
+        expect /body/variables[0]/value == 2
+
+        expect /body/variables[1]/name == ul16
+        expect /body/variables[1]/variablesReference == 0
+        expect /body/variables[1]/value == 4
+
+        expect /body/variables[2]/name == ul32
+        expect /body/variables[2]/variablesReference == 0
+        expect /body/variables[2]/value == 6
+
+        expect /body/variables[3]/name == ul64
+        expect /body/variables[3]/variablesReference == 0
+        expect /body/variables[3]/value == 8
+
+        expect /body/variables[4]/name == sl8
+        expect /body/variables[4]/variablesReference == 0
+        expect /body/variables[4]/value == -2
+    }
+}
+
+case "Local signed 16-bit int" {
+    request '{"command":"next","arguments":{"threadId":1},"type":"request","seq":25}'
+    response {
+        # ignore response
+    }
+    response {
+        # ignore stop event
+    }
+    request '{"command":"stackTrace","arguments":{"threadId":1,"startFrame":0,"levels":20},"type":"request","seq":26}'
+    response {
+        # ignore response
+    }
+    request '{"command":"variables","arguments":{"variablesReference":$(local_scope) },"type":"request","seq":27}'
+    response {
+        expect /type == "response"
+        expect /command == variables
+        expect /request_seq == 27
+        expect /success == true
+        expect LENGTH(/body/variables) == 6
+
+        expect /body/variables[0]/name == ul8
+        expect /body/variables[0]/variablesReference == 0
+        expect /body/variables[0]/value == 2
+
+        expect /body/variables[1]/name == ul16
+        expect /body/variables[1]/variablesReference == 0
+        expect /body/variables[1]/value == 4
+
+        expect /body/variables[2]/name == ul32
+        expect /body/variables[2]/variablesReference == 0
+        expect /body/variables[2]/value == 6
+
+        expect /body/variables[3]/name == ul64
+        expect /body/variables[3]/variablesReference == 0
+        expect /body/variables[3]/value == 8
+
+        expect /body/variables[4]/name == sl8
+        expect /body/variables[4]/variablesReference == 0
+        expect /body/variables[4]/value == -2
+
+        expect /body/variables[5]/name == sl16
+        expect /body/variables[5]/variablesReference == 0
+        expect /body/variables[5]/value == -4
+    }
+}
+
+case "Local signed 32-bit int" {
+    request '{"command":"next","arguments":{"threadId":1},"type":"request","seq":28}'
+    response {
+        # ignore response
+    }
+    response {
+        # ignore stop event
+    }
+    request '{"command":"stackTrace","arguments":{"threadId":1,"startFrame":0,"levels":20},"type":"request","seq":29}'
+    response {
+        # ignore response
+    }
+    request '{"command":"variables","arguments":{"variablesReference":$(local_scope) },"type":"request","seq":30}'
+    response {
+        expect /type == "response"
+        expect /command == variables
+        expect /request_seq == 30
+        expect /success == true
+        expect LENGTH(/body/variables) == 7
+
+        expect /body/variables[0]/name == ul8
+        expect /body/variables[0]/variablesReference == 0
+        expect /body/variables[0]/value == 2
+
+        expect /body/variables[1]/name == ul16
+        expect /body/variables[1]/variablesReference == 0
+        expect /body/variables[1]/value == 4
+
+        expect /body/variables[2]/name == ul32
+        expect /body/variables[2]/variablesReference == 0
+        expect /body/variables[2]/value == 6
+
+        expect /body/variables[3]/name == ul64
+        expect /body/variables[3]/variablesReference == 0
+        expect /body/variables[3]/value == 8
+
+        expect /body/variables[4]/name == sl8
+        expect /body/variables[4]/variablesReference == 0
+        expect /body/variables[4]/value == -2
+
+        expect /body/variables[5]/name == sl16
+        expect /body/variables[5]/variablesReference == 0
+        expect /body/variables[5]/value == -4
+
+        expect /body/variables[6]/name == sl32
+        expect /body/variables[6]/variablesReference == 0
+        expect /body/variables[6]/value == -6
+    }
+}
+
+case "Local signed 64-bit int" {
+    request '{"command":"next","arguments":{"threadId":1},"type":"request","seq":31}'
+    response {
+        # ignore response
+    }
+    response {
+        # ignore stop event
+    }
+    request '{"command":"stackTrace","arguments":{"threadId":1,"startFrame":0,"levels":20},"type":"request","seq":32}'
+    response {
+        # ignore response
+    }
+    request '{"command":"variables","arguments":{"variablesReference":$(local_scope) },"type":"request","seq":33}'
+    response {
+        expect /type == "response"
+        expect /command == variables
+        expect /request_seq == 33
+        expect /success == true
+        expect LENGTH(/body/variables) == 8
+
+        expect /body/variables[0]/name == ul8
+        expect /body/variables[0]/variablesReference == 0
+        expect /body/variables[0]/value == 2
+
+        expect /body/variables[1]/name == ul16
+        expect /body/variables[1]/variablesReference == 0
+        expect /body/variables[1]/value == 4
+
+        expect /body/variables[2]/name == ul32
+        expect /body/variables[2]/variablesReference == 0
+        expect /body/variables[2]/value == 6
+
+        expect /body/variables[3]/name == ul64
+        expect /body/variables[3]/variablesReference == 0
+        expect /body/variables[3]/value == 8
+
+        expect /body/variables[4]/name == sl8
+        expect /body/variables[4]/variablesReference == 0
+        expect /body/variables[4]/value == -2
+
+        expect /body/variables[5]/name == sl16
+        expect /body/variables[5]/variablesReference == 0
+        expect /body/variables[5]/value == -4
+
+        expect /body/variables[6]/name == sl32
+        expect /body/variables[6]/variablesReference == 0
+        expect /body/variables[6]/value == -6
+
+        expect /body/variables[7]/name == sl64
+        expect /body/variables[7]/variablesReference == 0
+        expect /body/variables[7]/value == -8
+    }
+}
+
+case "Local unsigned 8-bit int as char" {
+    request '{"command":"next","arguments":{"threadId":1},"type":"request","seq":34}'
+    response {
+        # ignore response
+    }
+    response {
+        # ignore stop event
+    }
+    request '{"command":"stackTrace","arguments":{"threadId":1,"startFrame":0,"levels":20},"type":"request","seq":35}'
+    response {
+        # ignore response
+    }
+    request '{"command":"variables","arguments":{"variablesReference":$(local_scope) },"type":"request","seq":36}'
+    response {
+        expect /type == "response"
+        expect /command == variables
+        expect /request_seq == 36
+        expect /success == true
+        expect LENGTH(/body/variables) == 8
+
+        expect /body/variables[0]/name == ul8
+        expect /body/variables[0]/variablesReference == 0
+        expect /body/variables[0]/value == "97 'a'"
+
+        expect /body/variables[1]/name == ul16
+        expect /body/variables[1]/variablesReference == 0
+        expect /body/variables[1]/value == 4
+
+        expect /body/variables[2]/name == ul32
+        expect /body/variables[2]/variablesReference == 0
+        expect /body/variables[2]/value == 6
+
+        expect /body/variables[3]/name == ul64
+        expect /body/variables[3]/variablesReference == 0
+        expect /body/variables[3]/value == 8
+
+        expect /body/variables[4]/name == sl8
+        expect /body/variables[4]/variablesReference == 0
+        expect /body/variables[4]/value == -2
+
+        expect /body/variables[5]/name == sl16
+        expect /body/variables[5]/variablesReference == 0
+        expect /body/variables[5]/value == -4
+
+        expect /body/variables[6]/name == sl32
+        expect /body/variables[6]/variablesReference == 0
+        expect /body/variables[6]/value == -6
+
+        expect /body/variables[7]/name == sl64
+        expect /body/variables[7]/variablesReference == 0
+        expect /body/variables[7]/value == -8
+    }
+}
+
+case "Local signed 8-bit int as char" {
+    request '{"command":"next","arguments":{"threadId":1},"type":"request","seq":37}'
+    response {
+        # ignore response
+    }
+    response {
+        # ignore stop event
+    }
+    request '{"command":"stackTrace","arguments":{"threadId":1,"startFrame":0,"levels":20},"type":"request","seq":38}'
+    response {
+        # ignore response
+    }
+    request '{"command":"variables","arguments":{"variablesReference":$(local_scope) },"type":"request","seq":39}'
+    response {
+        expect /type == "response"
+        expect /command == variables
+        expect /request_seq == 39
+        expect /success == true
+        expect LENGTH(/body/variables) == 8
+
+        expect /body/variables[0]/name == ul8
+        expect /body/variables[0]/variablesReference == 0
+        expect /body/variables[0]/value == "97 'a'"
+
+        expect /body/variables[1]/name == ul16
+        expect /body/variables[1]/variablesReference == 0
+        expect /body/variables[1]/value == 4
+
+        expect /body/variables[2]/name == ul32
+        expect /body/variables[2]/variablesReference == 0
+        expect /body/variables[2]/value == 6
+
+        expect /body/variables[3]/name == ul64
+        expect /body/variables[3]/variablesReference == 0
+        expect /body/variables[3]/value == 8
+
+        expect /body/variables[4]/name == sl8
+        expect /body/variables[4]/variablesReference == 0
+        expect /body/variables[4]/value == "98 'b'"
+
+        expect /body/variables[5]/name == sl16
+        expect /body/variables[5]/variablesReference == 0
+        expect /body/variables[5]/value == -4
+
+        expect /body/variables[6]/name == sl32
+        expect /body/variables[6]/variablesReference == 0
+        expect /body/variables[6]/value == -6
+
+        expect /body/variables[7]/name == sl64
+        expect /body/variables[7]/variablesReference == 0
+        expect /body/variables[7]/value == -8
+    }
+}
+
+case "Global unsigned 8-bit int as char" {
+    request '{"command":"next","arguments":{"threadId":1},"type":"request","seq":40}'
+    response {
+        # ignore response
+    }
+    response {
+        # ignore stop event
+    }
+    request '{"command":"stackTrace","arguments":{"threadId":1,"startFrame":0,"levels":20},"type":"request","seq":41}'
+    response {
+        # ignore response
+    }
+    request '{"command":"variables","arguments":{"variablesReference":$(global_scope)},"type":"request","seq":42}'
+    response {
+        expect /type == "response"
+        expect /command == variables
+        expect /request_seq == 42
+        expect /success == true
+        expect LENGTH(/body/variables) == 8
+
+        expect /body/variables[0]/name == ug8
+        expect /body/variables[0]/variablesReference == 0
+        expect /body/variables[0]/value == "99 'c'"
+
+        expect /body/variables[1]/name == ug16
+        expect /body/variables[1]/variablesReference == 0
+        expect /body/variables[1]/value == 2
+
+        expect /body/variables[2]/name == ug32
+        expect /body/variables[2]/variablesReference == 0
+        expect /body/variables[2]/value == 3
+
+        expect /body/variables[3]/name == ug64
+        expect /body/variables[3]/variablesReference == 0
+        expect /body/variables[3]/value == 4
+
+        expect /body/variables[4]/name == sg8
+        expect /body/variables[4]/variablesReference == 0
+        expect /body/variables[4]/value == -1
+
+        expect /body/variables[5]/name == sg16
+        expect /body/variables[5]/variablesReference == 0
+        expect /body/variables[5]/value == -2
+
+        expect /body/variables[6]/name == sg32
+        expect /body/variables[6]/variablesReference == 0
+        expect /body/variables[6]/value == -3
+
+        expect /body/variables[7]/name == sg64
+        expect /body/variables[7]/variablesReference == 0
+        expect /body/variables[7]/value == -4
+    }
+}
+
+case "Global signed 8-bit int as char" {
+    request '{"command":"next","arguments":{"threadId":1},"type":"request","seq":43}'
+    response {
+        # ignore response
+    }
+    response {
+        # ignore stop event
+    }
+    request '{"command":"stackTrace","arguments":{"threadId":1,"startFrame":0,"levels":20},"type":"request","seq":44}'
+    response {
+        # ignore response
+    }
+    request '{"command":"variables","arguments":{"variablesReference":$(global_scope) },"type":"request","seq":45}'
+    response {
+        expect /type == "response"
+        expect /command == variables
+        expect /request_seq == 45
+        expect /success == true
+        expect LENGTH(/body/variables) == 8
+
+        expect /body/variables[0]/name == ug8
+        expect /body/variables[0]/variablesReference == 0
+        expect /body/variables[0]/value == "99 'c'"
+
+        expect /body/variables[1]/name == ug16
+        expect /body/variables[1]/variablesReference == 0
+        expect /body/variables[1]/value == 2
+
+        expect /body/variables[2]/name == ug32
+        expect /body/variables[2]/variablesReference == 0
+        expect /body/variables[2]/value == 3
+
+        expect /body/variables[3]/name == ug64
+        expect /body/variables[3]/variablesReference == 0
+        expect /body/variables[3]/value == 4
+
+        expect /body/variables[4]/name == sg8
+        expect /body/variables[4]/variablesReference == 0
+        expect /body/variables[4]/value == "100 'd'"
+
+        expect /body/variables[5]/name == sg16
+        expect /body/variables[5]/variablesReference == 0
+        expect /body/variables[5]/value == -2
+
+        expect /body/variables[6]/name == sg32
+        expect /body/variables[6]/variablesReference == 0
+        expect /body/variables[6]/value == -3
+
+        expect /body/variables[7]/name == sg64
+        expect /body/variables[7]/variablesReference == 0
+        expect /body/variables[7]/value == -4
+    }
+}
+
+
+stop
+

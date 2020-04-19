@@ -90,19 +90,19 @@ extern struct channel *insert_mem_ch;      // defined in run.c
  **************************************************************************/
 int mem_init(pid_t p) {
     pid = p;
-    char tmp[256];
+    char tmpbuf[256];
 
     if (!pagemap) {
-        snprintf(tmp, sizeof(tmp), "/proc/%d/pagemap", pid);
-        pagemap = fopen(tmp, "rb");  // this is binary file
+        sprintf(tmpbuf, "/proc/%d/pagemap", pid);
+        pagemap = fopen(tmpbuf, "rb");  // this is binary file
         if (!pagemap) {
-            ERR("Cannot open file '%s': %s", tmp, strerror(errno));
+            ERR("Cannot open file '%s': %s", tmpbuf, strerror(errno));
             return FAILURE;
         }
     }
 
-    snprintf(tmp, sizeof(tmp), "/proc/%d/clear_refs", pid);
-    clear_refs_filename = strdup(tmp);
+    snprintf(tmpbuf, sizeof(tmpbuf), "/proc/%d/clear_refs", pid);
+    clear_refs_filename = strdup(tmpbuf);
 
     memdiff = best_memdiff(MEM_SEGMENT_SIZE);    // get best memdiff implementtion based on available CPU features
 
@@ -244,10 +244,12 @@ int mem_process_region(ULONG start, ULONG end, ULONG step_id, int force) {
     } else {
         if (fseek(pagemap, offset, SEEK_SET)) {
             ERR("Cannot position to page entry in '%s': %s", tmp, strerror(errno));
+            free(entry);
             return FAILURE;
         }
-        if (!fread(entry, PAGE_DESCR_SIZE, page_count, pagemap)) {
+        if (page_count != fread(entry, PAGE_DESCR_SIZE, page_count, pagemap)) {
             ERR("Cannot read page entry from '%s'", tmp);
+            free(entry);
             return FAILURE;
         }
     }
@@ -329,6 +331,7 @@ int mem_process_region(ULONG start, ULONG end, ULONG step_id, int force) {
             if (*cur & DIRTY_BIT) {
                 // found page with set soft-dirty bit
                 if (SUCCESS != process_dirty_page(start + PAGE_SIZE * page_num, step_id)) {
+                    free(entry);
                     return FAILURE;
                 }
                 dirty_found = 1;
@@ -505,7 +508,10 @@ int mem_read_regions(void) {
 
             ULONG head, tail;
             /* first field, already 0-terminated, has start and end address */
-            sscanf(tmp, "%" PRIx64 "-%" PRIx64, &head, &tail);
+            if (2 != sscanf(tmp, "%" PRIx64 "-%" PRIx64, &head, &tail)) {
+                WARN("Cannot read memory regions");
+                continue;
+            }
             if (refresh && cur) {
                 if (cur->start == head && cur->end == tail) {
                     last = &cur->next;
@@ -527,6 +533,8 @@ int mem_read_regions(void) {
                         /* it is important to use aligned momory as CPU instructions used by memdiff operates with aligned memory */
                         if (posix_memalign((void **)&pages, MEM_SEGMENT_SIZE, cur->start - head)) {
                             ERR("Out of memory");
+                            free(new_pages);
+                            fclose(maps);
                             return FAILURE;
                         }
                         memset(pages, 0, cur->start - head);
@@ -554,12 +562,15 @@ int mem_read_regions(void) {
                         /* it is important to use aligned momory as CPU instructions used by memdiff operates with aligned memory */
                         if (posix_memalign((void **)&pages, MEM_SEGMENT_SIZE, tail - cur->end)) {
                             ERR("Out of memory");
+                            fclose(maps);
+                            free(new_pages);
                             return FAILURE;
                         }
                         memset(pages, 0, cur->start - head);
                         for (int i = 0; i < page_count; i++) {
                             new_pages[page_num++] = pages + (i * PAGE_SIZE);
                         }
+                        // coverity[leaked_storage] - in fact 'pages' doesn't leak
                     }
                     free(cur->pages);
                     cur->pages = new_pages;
@@ -579,6 +590,7 @@ int mem_read_regions(void) {
             struct region *new_reg = malloc(sizeof(*new_reg));
             if (!new_reg) {
                 ERR("Out of memory");
+                fclose(maps);
                 return FAILURE;
             }
             new_reg->start = head;
@@ -587,6 +599,8 @@ int mem_read_regions(void) {
             new_reg->pages = malloc(page_count * sizeof(*new_reg->pages));
             if (!new_reg->pages) {
                 ERR("Out of memory");
+                fclose(maps);
+                free(new_reg);
                 return FAILURE;
             }
             /* pages are not to be freed so allocate one big chunk for all the pages */
@@ -594,8 +608,12 @@ int mem_read_regions(void) {
             /* it is important to use aligned memory as CPU instructions used by memdiff operates with aligned memory */
             if (posix_memalign((void **)&pages, MEM_SEGMENT_SIZE, new_reg->end - new_reg->start)) {
                 ERR("Out of memory");
+                fclose(maps);
+                free(new_reg->pages);
+                free(new_reg);
                 return FAILURE;
             }
+            // coverity[tainted_data] - we can trust the data we read from /proc/<pid>/mem
             memset(pages, 0, new_reg->end - new_reg->start);
             for (int i = 0; i < page_count; i++) {
                 new_reg->pages[i] = pages + (i * PAGE_SIZE);
@@ -660,7 +678,7 @@ int process_dirty_page(ULONG start, ULONG step_id) {
             return FAILURE;
         }
         char *local_addr = mapped_mem(addr);
-        if (!local_addr || memdiff(local_addr, mem, MEM_SEGMENT_SIZE)) {
+        if (!*local_addr || memdiff(local_addr, mem, MEM_SEGMENT_SIZE)) {
             /* found changed segment, store it */
             memcpy(local_addr, mem, MEM_SEGMENT_SIZE);              // update local cache
 
@@ -724,9 +742,10 @@ int get_base_address(pid_t p, uint64_t *base) {
         while (i < 6 && NULL != (field = strtok_r(NULL, " \t\n", &state))) {
             i++;
         }
-        if (!strcmp(field, exe_name)) {
+        if (field && !strcmp(field, exe_name)) {
             /* first field, already 0-terminated, has start and end address */
             sscanf(tmp, "%" PRIx64, base);
+	    INFO("Base %" PRIx64, *base);
             break;
        }
     }

@@ -2,6 +2,7 @@
 
 ![Build/Test](https://github.com/qrdl/flightrec/workflows/Build/Test/badge.svg?branch=master)
 [![Language grade: C/C++](https://img.shields.io/lgtm/grade/cpp/g/qrdl/flightrec.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/qrdl/flightrec/context:cpp)
+[![Coverity Scan](https://scan.coverity.com/projects/20876/badge.svg)](https://scan.coverity.com/projects/qrdl-flightrec)
 
 ## Description
 Flight Recorder (Flightrec for short) allows to record client program execution and examine it later. It consists of three building blocks:
@@ -21,6 +22,8 @@ Flightrec was tested only on x86-64 architecture, however it should be possible 
 
 ### OS
 Flightrec supports only 64-bit Linux and it uses some Linux-specific (non-POSIX) APIs for monitoring memory. There are no plans to support other OSes.
+
+Linux kernel must have `CONFIG_PROC_PAGE_MONITOR` switched on to generate `/proc/<pid>/pagemap` file, which is default for most distribuition, but not for WLS (Windows Subsystem for Linux), therefore Flightrec doesn't work under WSL.
 
 ### Languages and compilers
 For now Flightrec supports only client binaries, compiled from C using GCC compiler. There are plans to support other compilers and languages, and there were some encouraging tests with Go using native Go compiler.

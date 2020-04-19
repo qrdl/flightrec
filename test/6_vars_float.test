@@ -1,0 +1,223 @@
+# Caller must set $(path)
+start "../examine/fr_examine"
+
+case "Init" {
+    request '{"command":"initialize","arguments":{"clientID":"tester","clientName":"Tester"},"type":"request","seq":1}'
+    # response
+    response {
+        # ignore init response
+    }
+    response {
+        # ignore init done event
+    }
+    request '{"command":"launch","arguments":{"request":"launch","program":"$(path)/test5","sourcePath":"$(path)","stopOnEntry":true},"type":"request","seq":2}'
+    # response
+    response {
+        expect /type == "response"
+        expect /command == launch
+        expect /request_seq == 2
+        expect /success == true
+    }
+    response {
+        expect /type == event
+        expect /event == stopped
+        expect /body/reason == entry
+    }
+    request '{"command":"configurationDone","type":"request","seq":3}'
+    response {
+        expect /type == "response"
+        expect /command == configurationDone
+        expect /request_seq == 3
+        expect /success == true
+    }
+}
+
+case "Get scopes" {
+    request '{"command":"stackTrace","arguments":{"threadId":1,"startFrame":0,"levels":20},"type":"request","seq":4}'
+    response {
+        expect /type == "response"
+        expect /command == stackTrace
+        expect /request_seq == 4
+        expect /success == true
+
+        expect /body/stackFrames[0]/name == main
+        expect /body/stackFrames[0]/id == 0
+        expect /body/stackFrames[0]/line == 7
+        expect /body/stackFrames[0]/column == 0
+        expect /body/stackFrames[0]/source/name == test5.c
+        expect /body/stackFrames[0]/source/path == "$(path)/test5.c"
+        expect /body/stackFrames[0]/source/sourceReference == 0
+
+    }
+    request '{"command":"scopes","arguments":{"frameId":0},"type":"request","seq":5}'
+    response {
+        expect /type == "response"
+        expect /command == scopes
+        expect /request_seq == 5
+        expect /success == true
+
+        expect /body/scopes[0]/name == Globals
+        set global_scope = /body/scopes[0]/variablesReference
+
+        expect /body/scopes[1]/name == Locals
+        set local_scope = /body/scopes[1]/variablesReference
+    }
+}
+
+case "Get globals" {
+    request '{"command":"variables","arguments":{"variablesReference":$(global_scope) },"type":"request","seq":6}'
+    response {
+        expect /type == "response"
+        expect /command == variables
+        expect /request_seq == 6
+        expect /success == true
+        expect LENGTH(/body/variables) == 2
+
+        expect /body/variables[0]/name == pi
+        expect /body/variables[0]/variablesReference == 0
+        expect /body/variables[0]/value == 3.14159     # rounded to 5 digits
+
+        expect /body/variables[1]/name == e
+        expect /body/variables[1]/variablesReference == 0
+        expect /body/variables[1]/value == 2.71828     # rounded to 5 digits
+    }
+    # program stopped on entry, local variables aren't visible yet
+    request '{"command":"variables","arguments":{"variablesReference":$(local_scope) },"type":"request","seq":7}'
+    response {
+        expect /type == "response"
+        expect /command == variables
+        expect /request_seq == 7
+        expect /success == true
+        expect LENGTH(/body/variables) == 0
+    }
+}
+
+##### Now step line by line and read local variables as they appear
+
+case "Local double" {
+    request '{"command":"next","arguments":{"threadId":1},"type":"request","seq":8}'
+    response {
+        # ignore response
+    }
+    response {
+        # ignore stop event
+    }
+    request '{"command":"next","arguments":{"threadId":1},"type":"request","seq":9}'
+    response {
+        # ignore response
+    }
+    response {
+        # ignore stop event
+    }
+    request '{"command":"stackTrace","arguments":{"threadId":1,"startFrame":0,"levels":20},"type":"request","seq":10}'
+    response {
+        # ignore response
+    }
+    request '{"command":"variables","arguments":{"variablesReference":$(local_scope) },"type":"request","seq":11}'
+    response {
+        expect /type == "response"
+        expect /command == variables
+        expect /request_seq == 11
+        expect /success == true
+        expect LENGTH(/body/variables) == 1
+
+        expect /body/variables[0]/name == foo
+        expect /body/variables[0]/variablesReference == 0
+        expect /body/variables[0]/value == -6.28319
+    }
+}
+
+case "Local float" {
+    request '{"command":"next","arguments":{"threadId":1},"type":"request","seq":12}'
+    response {
+        # ignore response
+    }
+    response {
+        # ignore stop event
+    }
+    request '{"command":"stackTrace","arguments":{"threadId":1,"startFrame":0,"levels":20},"type":"request","seq":13}'
+    response {
+        # ignore response
+    }
+    request '{"command":"variables","arguments":{"variablesReference":$(local_scope) },"type":"request","seq":14}'
+    response {
+        expect /type == "response"
+        expect /command == variables
+        expect /request_seq == 14
+        expect /success == true
+        expect LENGTH(/body/variables) == 2
+
+        expect /body/variables[0]/name == foo
+        expect /body/variables[0]/variablesReference == 0
+        expect /body/variables[0]/value == -6.28319
+
+        expect /body/variables[1]/name == bar
+        expect /body/variables[1]/variablesReference == 0
+        expect /body/variables[1]/value == -1.35914
+    }
+}
+
+case "Local double (scientific notation)" {
+    request '{"command":"next","arguments":{"threadId":1},"type":"request","seq":15}'
+    response {
+        # ignore response
+    }
+    response {
+        # ignore stop event
+    }
+    request '{"command":"stackTrace","arguments":{"threadId":1,"startFrame":0,"levels":20},"type":"request","seq":16}'
+    response {
+        # ignore response
+    }
+    request '{"command":"variables","arguments":{"variablesReference":$(local_scope) },"type":"request","seq":17}'
+    response {
+        expect /type == "response"
+        expect /command == variables
+        expect /request_seq == 17
+        expect /success == true
+        expect LENGTH(/body/variables) == 2
+
+        expect /body/variables[0]/name == foo
+        expect /body/variables[0]/variablesReference == 0
+        expect /body/variables[0]/value == -6.28319e-09
+
+        expect /body/variables[1]/name == bar
+        expect /body/variables[1]/variablesReference == 0
+        expect /body/variables[1]/value == -1.35914
+    }
+}
+
+case "Global float (scientific notation)" {
+    request '{"command":"next","arguments":{"threadId":1},"type":"request","seq":18}'
+    response {
+        # ignore response
+    }
+    response {
+        # ignore stop event
+    }
+    request '{"command":"stackTrace","arguments":{"threadId":1,"startFrame":0,"levels":20},"type":"request","seq":19}'
+    response {
+        # ignore response
+    }
+    request '{"command":"variables","arguments":{"variablesReference":$(global_scope) },"type":"request","seq":20}'
+    response {
+        expect /type == "response"
+        expect /command == variables
+        expect /request_seq == 20
+        expect /success == true
+        expect LENGTH(/body/variables) == 2
+
+        expect /body/variables[0]/name == pi
+        expect /body/variables[0]/variablesReference == 0
+        expect /body/variables[0]/value == 3.14159
+
+        expect /body/variables[1]/name == e
+        expect /body/variables[1]/variablesReference == 0
+        expect /body/variables[1]/value == -2.71828e-06
+    }
+}
+
+
+
+stop
+

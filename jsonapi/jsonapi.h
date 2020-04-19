@@ -53,7 +53,7 @@
                                             ret; \
                                         })
 #define JSON_PRINT(O)                   json_object_to_json_string(O)
-#define JSON_GET_ARRAY_SIZE(O)          json_get_array_length(O)
+#define JSON_GET_ARRAY_SIZE(O)          json_object_array_length(O)
 #define JSON_GET_OBJECT_TYPE(O)         json_object_get_type(O)
 #define JSON_NEW_OBJ()                  json_object_new_object()
 #define JSON_COPY_OBJ(O)                ({ \

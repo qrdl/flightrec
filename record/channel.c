@@ -66,10 +66,13 @@ struct channel *ch_create(void) {
     struct channel *ch = malloc(sizeof(*ch));
     ch->head = ch->tail = NULL;
     if (0 != sem_init(&ch->sem, 0, 0)) {
+        free(ch);
         ERR("Cannot initialise the semaphore: %s", strerror(errno));
         return NULL;
     }
     if (0 != pthread_mutex_init(&ch->mutex, NULL)) {
+        sem_destroy(&ch->sem);
+        free(ch);
         ERR("Cannot initialise the mutex: %s", strerror(errno));
         return NULL;
     }

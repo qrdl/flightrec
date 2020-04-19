@@ -340,6 +340,7 @@ int proc_lines(Dwarf_Debug dbg, Dwarf_Die cu_die, ULONG unit_id) {
                                   basename(tmp), path, unit_id, i+1);    // DWARF indexes files from 1
             free(tmp);
             if (DAB_OK != ret) {
+                STRFREE(abspath);
                 RETCLEAN(FAILURE);
             }
             fileids[i] = DAB_LAST_ID;
@@ -1383,8 +1384,10 @@ int attr_present(struct die_attr *attr_list, ...) {
 
     va_start(items, attr_list);
     for (cur_item = va_arg(items, int); cur_item >= 0; cur_item = va_arg(items, int)) {
-        if (!(attr_list[cur_item].flags & AF_PRESENT))
+        if (!(attr_list[cur_item].flags & AF_PRESENT)) {
+            va_end(items);
             return 0;
+        }
     }
     va_end(items);
 

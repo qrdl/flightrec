@@ -66,30 +66,43 @@ int start(char *cmd_line, char **error) {
         *error = strerror(errno);
         return FAILURE;
     }
-    fcntl(selfpipe[1], F_SETFD, 1);    // set close-on-exec
+    if (fcntl(selfpipe[1], F_SETFD, 1)) {    // set close-on-exec
+        fprintf(stderr, "Cannot set close_on-exit flag on FD - %s\n", strerror(errno));
+        return FAILURE;
+    }
 
     char **argv = chop(cmd_line);
     pid_t p = fork();
     if (p < 0) {
         *error = strerror(errno);
+        free(argv);
         return FAILURE;
     } else if (p == 0) {
         /*child */
         close(selfpipe[0]);
         close(pipe1[1]);
-        fcntl(pipe1[0], F_SETFD, 0);    // clear close-on-exec
+        if (fcntl(pipe1[0], F_SETFD, 0)) {    // clear close-on-exec
+            fprintf(stderr, "Cannot clear close_on-exit flag on FD - %s\n", strerror(errno));
+            _exit(0);
+        }
         if (pipe1[0] != STDIN_FILENO) {
             dup2(pipe1[0], STDIN_FILENO);
             close(pipe1[0]);
         }
         close(pipe2[0]);
-        fcntl(pipe2[1], F_SETFD, 0);    // clear close-on-exec for fd
+        if (fcntl(pipe2[1], F_SETFD, 0)) {    // clear close-on-exec
+            fprintf(stderr, "Cannot clear close_on-exit flag on FD - %s\n", strerror(errno));
+            _exit(0);
+        }
         if (pipe2[1] != STDOUT_FILENO) {
             dup2(pipe2[1], STDOUT_FILENO);
             close(pipe2[1]);
         }
         close(pipe3[0]);
-        fcntl(pipe3[1], F_SETFD, 0);    // clear close-on-exec for fd
+        if (fcntl(pipe3[1], F_SETFD, 0)) {    // clear close-on-exec
+            fprintf(stderr, "Cannot clear close_on-exit flag on FD - %s\n", strerror(errno));
+            _exit(0);
+        }
         if (pipe3[1] != STDERR_FILENO) {
             dup2(pipe3[1], STDERR_FILENO);
             close(pipe3[1]);

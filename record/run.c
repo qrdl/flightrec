@@ -248,7 +248,7 @@ int set_breakpoints(pid_t pid) {
             errno = 0;  // PTRACE_PEEKDATA can return anything, even -1, so use only errno for diag
             instr = ptrace(PTRACE_PEEKDATA, pid, (void *)(address+base_address), NULL);
             if (errno) {
-                if (EIO == errno && !base_address) {
+                if ((EIO == errno || EFAULT == errno) && !base_address) {
                     /* may fail because address needs to be adjusted by base address */
                     if (SUCCESS != get_base_address(pid, &base_address)) {
                         RETCLEAN(FAILURE);
@@ -389,6 +389,7 @@ int process_breakpoint(pid_t pid) {
             // if new address doesn't fall into known ranges, re-read memory map
             if (!mem_in_cache(event.address, event.size)) {
                 if (SUCCESS != mem_read_regions()) {
+                    free(msg);
                     return FAILURE;
                 }
             }
