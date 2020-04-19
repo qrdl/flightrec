@@ -90,19 +90,19 @@ extern struct channel *insert_mem_ch;      // defined in run.c
  **************************************************************************/
 int mem_init(pid_t p) {
     pid = p;
-    char tmp[256];
+    char tmpbuf[256];
 
     if (!pagemap) {
-        snprintf(tmp, sizeof(tmp), "/proc/%d/pagemap", pid);
-        pagemap = fopen(tmp, "rb");  // this is binary file
+        sprintf(tmpbuf, "/proc/%d/pagemap", pid);
+        pagemap = fopen(tmpbuf, "rb");  // this is binary file
         if (!pagemap) {
-            ERR("Cannot open file '%s': %s", tmp, strerror(errno));
+            ERR("Cannot open file '%s': %s", tmpbuf, strerror(errno));
             return FAILURE;
         }
     }
 
-    snprintf(tmp, sizeof(tmp), "/proc/%d/clear_refs", pid);
-    clear_refs_filename = strdup(tmp);
+    snprintf(tmpbuf, sizeof(tmpbuf), "/proc/%d/clear_refs", pid);
+    clear_refs_filename = strdup(tmpbuf);
 
     memdiff = best_memdiff(MEM_SEGMENT_SIZE);    // get best memdiff implementtion based on available CPU features
 
@@ -745,6 +745,7 @@ int get_base_address(pid_t p, uint64_t *base) {
         if (field && !strcmp(field, exe_name)) {
             /* first field, already 0-terminated, has start and end address */
             sscanf(tmp, "%" PRIx64, base);
+	    INFO("Base %" PRIx64, *base);
             break;
        }
     }
