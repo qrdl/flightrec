@@ -839,14 +839,14 @@ int add_var_entry(JSON_OBJ *container, int parent_type, ULONG parent, char *name
             }
             switch (size) {
                 case __SIZEOF_FLOAT__:
-                    sprintf(new_val, "%f", *(float *)mem);
+                    sprintf(new_val, "%g", *(float *)mem);
                     break;
                 case __SIZEOF_DOUBLE__:
-                    sprintf(new_val, "%lf", *(double *)mem);
+                    sprintf(new_val, "%lg", *(double *)mem);
                     break;
 #if __SIZEOF_LONG_DOUBLE__ > __SIZEOF_DOUBLE__      // only when long double is longer than double - to avoid compile error with equal cases
                 case __SIZEOF_LONG_DOUBLE__:
-                    sprintf(new_val, "%Lf", *(long double *)mem);
+                    sprintf(new_val, "%Lg", *(long double *)mem);
                     break;
 #endif
                 default:

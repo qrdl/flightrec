@@ -1,4 +1,6 @@
 S   [ \t\v\n\f]
+D	[0-9]
+E	[Ee][+-]?{D}+
 
 %{
 #include <stdio.h>
@@ -43,7 +45,11 @@ extern int lineno;
 "("         { return '('; }
 ")"         { return ')'; }
 
-[0-9]+      { yylval.value.literal = strdup(yytext); if (strchr(yytext, '.')) return FLOAT; else return INT;}
+{D}+                { yylval.value.literal = strdup(yytext); return INT;}
+{D}+{E}?	        { yylval.value.literal = strdup(yytext); return FLOAT;}
+{D}*"."{D}+({E})?	{ yylval.value.literal = strdup(yytext); return FLOAT;}
+{D}+"."{D}*({E})?	{ yylval.value.literal = strdup(yytext); return FLOAT;}
+
 
 \"(\\.|[^\\"\n])*\"     { yytext[strlen(yytext)-1] = '\0'; yylval.value.literal = process_literal(yytext+1); return STRING; }
 \'(\\.|[^\\'\n])*\'     { yytext[strlen(yytext)-1] = '\0'; yylval.value.literal = process_literal(yytext+1); return STRING; }
