@@ -36,11 +36,17 @@ static int memdiff64(const char *buf1, const char *buf2, size_t size);
 #endif
 #ifdef __AVX2__
 static int memdiff32(const char *buf1, const char *buf2, size_t size);
+static uint32_t memisset32(const char *buf1, size_t size);
+static __m256i zeromask32;
 #endif
 #ifdef __SSE2__
 static int memdiff16(const char *buf1, const char *buf2, size_t size);
+static uint32_t memisset16(const char *buf1, size_t size);
+static __m128i zeromask16;
 #endif
 static int memdiff8(const char *buf1, const char *buf2, size_t size);
+static uint32_t memisset8(const char *buf1, size_t size);
+
 
 /**************************************************************************
  *
@@ -75,6 +81,48 @@ int (* best_memdiff(size_t size))(const char *, const char *, size_t) {
 
     return  &memdiff8;        // last resort - use 8-byte comparison only
 }
+
+
+/**************************************************************************
+ *
+ *  Function:   best_memisset
+ *
+ *  Params:     size
+ *
+ *  Return:     pointer to function that checks if any bit is set
+ *
+ *  Descr:      Finds most effective implementation of memory testing
+ *              for the CPU and given buffer size
+ *
+ **************************************************************************/
+uint32_t (* best_memisset(size_t size))(const char *, size_t) {
+    /* test for AVX512DQ rather then AVX512F because testing function _kortestz_mask8_u8() requires AVX512DQ,
+       and AVX512DQ implies AVX512F */
+#ifdef __AVX512DQ__
+    if (size >= 64 && __builtin_cpu_supports("avx512dq")) {    // 64-byte vectors supported
+        return &memisset64;
+    }
+#endif
+#ifdef __AVX2__
+    if (size >= 32 && __builtin_cpu_supports("avx2")) {        // 32-byte vectors supported
+        const char tmp[32] = { 0x00 };
+        zeromask32 = _mm256_loadu_si256((__m256i const *)tmp);
+
+        return &memisset32;
+    }
+#endif
+#ifdef __SSE2__
+    if (size >= 16 && __builtin_cpu_supports("sse2")) {        // 16-byte vectors supported
+        const char tmp[16] = { 0x00 };
+        zeromask16 = _mm_loadu_si128((__m128i const *)tmp);
+
+        return &memisset16;
+    }
+#endif
+
+    return  &memisset8;        // last resort - use 8-byte comparison only
+}
+
 
 
 #define STEP(A) do { \
@@ -215,3 +263,74 @@ int memdiff8(const char *buf1, const char *buf2, size_t size) {
     return 0;       // buffers are identical
 }
 
+
+#ifdef __AVX2__
+/**************************************************************************
+ *
+ *  Function:   memisset32
+ *
+ *  Params:     buf - buffer (must be aligned to 32-byte boundary)
+ *              size - size of buffers
+ *
+ *  Return:     0 (all bits are zero) / bitmask with 1 set for every
+ *              non-zero bit
+ *
+ *  Descr:      Check is buffer is non-zero
+ *
+ **************************************************************************/
+uint32_t memisset32(const char *buf, size_t size) {
+    (void)(size);
+    return _mm256_movemask_epi8(_mm256_cmpgt_epi8(_mm256_load_si256((__m256i const *)buf), zeromask32));
+}
+#endif
+
+
+#ifdef __SSE2__
+/**************************************************************************
+ *
+ *  Function:   memisset16
+ *
+ *  Params:     buf - buffer (must be aligned to 16-byte boundary)
+ *              size - size of buffers
+ *
+ *  Return:     0 (all bits are zero) / bitmask with 1 set for every
+ *              non-zero bit
+ *
+ *  Descr:      Check is buffer is non-zero
+ *
+ **************************************************************************/
+uint32_t memisset16(const char *buf, size_t size) {
+    if (size == 32) {
+        uint32_t ret = _mm_movemask_epi8(_mm_cmpgt_epi8(_mm_load_si128((__m128i const *)buf), zeromask16));
+        ret <<= 16;
+        ret |= _mm_movemask_epi8(_mm_cmpgt_epi8(_mm_load_si128((__m128i const *)buf+16), zeromask16));
+        return ret;
+    } else {    // size is 16
+        return _mm_movemask_epi8(_mm_cmpgt_epi8(_mm_load_si128((__m128i const *)buf), zeromask16));
+    }
+}
+#endif
+
+
+/**************************************************************************
+ *
+ *  Function:   memisset8
+ *
+ *  Params:     buf - buffer
+ *              size - size of buffers
+ *
+ *  Return:     0 (all bits are zero) / bitmask with 1 set for every
+ *              non-zero bit
+ *
+ *  Descr:      Check is buffer is non-zero
+ *
+ **************************************************************************/
+uint32_t memisset8(const char *buf, size_t size) {
+    uint32_t ret = 0;
+    for (size_t i = 0; i < size; i++) {
+        ret <<= 1;
+        ret |= !!buf[i];
+    }
+
+    return ret;
+}

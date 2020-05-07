@@ -50,6 +50,8 @@
 #include "channel.h"
 #include "workers.h"
 
+#if 0
+
 /* TODO: consider using array rather than linked list for cache locality */
 struct region {
     uint64_t        start;
@@ -693,6 +695,8 @@ int process_dirty_page(ULONG start, ULONG step_id) {
 
     return SUCCESS;
 }
+
+#endif
 
 
 /**************************************************************************

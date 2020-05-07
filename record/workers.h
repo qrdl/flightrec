@@ -85,4 +85,6 @@ void *wrk_insert_step(void *arg);
 void *wrk_insert_heap(void *arg);
 void *wrk_insert_mem(void *arg);
 
+extern struct channel *insert_mem_ch;      // defined in run.c
+
 #endif

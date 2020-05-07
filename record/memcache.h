@@ -1,13 +1,12 @@
 /**************************************************************************
  *
- *  File:       mem.h
+ *  File:       memcache.h
  *
  *  Project:    Flight recorder (https://github.com/qrdl/flightrec)
  *
- *  Descr:      Common definitions
+ *  Descr:      Cached memory ops
  *
- *  Notes:      Memeory-related definitions and functions, used mostly by
- *              'record' component
+ *  Notes:
  *
  **************************************************************************
  *
@@ -27,30 +26,15 @@
  *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *
  **************************************************************************/
-#ifndef _MEM_H
-#define _MEM_H
+#ifndef _MEMCACHE_H
+#define _MEMCACHE_H
 
 #include <inttypes.h>
 #include <sys/types.h>
 
-// 32 is optimal for AVX2 instruction set - requires just one instruction to compare buffers
-#define MEM_SEGMENT_SIZE    32
-
-#define HEAP_EVENT_ALLOC    1
-#define HEAP_EVENT_FREE     2
-
-/* memory allocation/deallocation events, sent by preload shared lib to tracer */
-struct heap_event {
-    int         type;
-    uint64_t    address;
-    uint64_t    size;
-};
-
-int get_base_address(pid_t p, uint64_t *offset);
-
-/* function returns pointer to function with fastest implementation based on instruction set and buffer size */
-int (* best_memdiff(size_t count))(const char *, const char *, size_t);
-uint32_t (* best_memisset(size_t count))(const char *, size_t);
+int init_cache(pid_t pid);
+void cache_add_region(uint64_t start, uint64_t size);
+void mark_dirty(uint64_t address);
+int process_dirty(uint64_t step);
 
 #endif
-

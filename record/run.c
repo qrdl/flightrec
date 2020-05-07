@@ -52,6 +52,7 @@
 #include "flightrec.h"
 #include "record.h"
 #include "mem.h"
+#include "memcache.h"
 #include "channel.h"
 #include "workers.h"
 
@@ -128,23 +129,34 @@ int record(char *fr_path, char *params[]) {
         START_WORKER(heap);
         START_WORKER(mem);
 
-        int first = 1;
-        int signum;
+        /* continue to first executable line */
+        if (-1 == ptrace(PTRACE_CONT, pid, NULL, NULL)) {
+            ERR("Cannot start executing child program: %s", strerror(errno));
+            return FAILURE;
+        }
+        waitpid(pid, &wait_status, 0);      // wait for SIGTRAP from child, indicating the breakpoint
+        int signum = WSTOPSIG(wait_status);
+        if (WIFEXITED(wait_status) || SIGTRAP != signum) {
+            ERR("Child exited right after the start");
+            return FAILURE;
+        }
+
+        /* init memory cache and store initial memory content */
+        if (SUCCESS != init_cache(pid)) {
+            return FAILURE;
+        }
+        if (SUCCESS != process_breakpoint(pid)) {
+            return FAILURE;
+        }
+
+        /* TODO load BPF programs to monitor page faults and mmap/munmap/brk syscalls */
+
         while (-1 != ptrace(PTRACE_CONT, pid, NULL, NULL)) {
             waitpid(pid, &wait_status, 0);      // wait for SIGTRAP from child, indicating the breakpoint
             if (WIFEXITED(wait_status)) {
                 INFO("child exited");
                 signum = 0;
                 break;                          // child exited ok
-            }
-            if (first) {
-                /* cannot init memory before as this is the first point where tracee is
-                   fully initialised.
-                   TODO Consider moving out of loop */
-                if (SUCCESS != mem_init(pid)) {
-                    return FAILURE;
-                }
-                first = 0;
             }
 
             if (WIFSTOPPED(wait_status)) {
@@ -167,7 +179,7 @@ int record(char *fr_path, char *params[]) {
         INFO("Waiting for worker threads to finish");
 
         /* Send termination to workers and wait for workers to finish. Because workers
-           flush data to DB, process them one by one */
+           flush data to DB, process them one by one, concurrency can corrupt DB */
         WAIT_WORKER(step);
         WAIT_WORKER(heap);
         WAIT_WORKER(mem);
@@ -223,7 +235,6 @@ int set_breakpoints(pid_t pid) {
     REG_TYPE address;
     REG_TYPE int3 = 0xCC;    // INT 3
 
-    // TODO Change update by PK to update by rowid - simpler and probably faster
     if (DAB_OK != DAB_CURSOR_OPEN(&cursor, "SELECT "
                 "address, "
                 "rowid "
@@ -385,17 +396,8 @@ int process_breakpoint(pid_t pid) {
         msg->step_id = step_id;
         msg->address = event.address;
         if (HEAP_EVENT_ALLOC == event.type) {
-//            DBG("Malloc for %" PRIu64 " bytes", event.size);
-            // if new address doesn't fall into known ranges, re-read memory map
-            if (!mem_in_cache(event.address, event.size)) {
-                if (SUCCESS != mem_read_regions()) {
-                    free(msg);
-                    return FAILURE;
-                }
-            }
             msg->size = event.size;
         } else {
-//            DBG("Free");
             msg->size = 0;      // indicate 'free'
         }
         ch_write(insert_heap_ch, (char *)msg, sizeof(*msg));    // channel reader will free msg
@@ -406,26 +408,11 @@ int process_breakpoint(pid_t pid) {
     }
 
     if (FUNC_FLAG_START != func_flag) {
-        uint64_t start, end;
-        int ret;
-        int dirty_found = 0;
-        /* loop through memory regions of interest (such as heap and stack), process "dirty" pages */
-        for (ret = mem_first_region(&start, &end); SUCCESS == ret; ret = mem_next_region(&start, &end)) {
-            ret = mem_process_region(start, end, step_id, 0);
-            if (FOUND == ret) {
-                dirty_found = 1;
-            } else if (SUCCESS != ret) {
-                return FAILURE;
-            }
+        if (SUCCESS != process_dirty(step_id)) {
+            return FAILURE;
         }
-
         if (FUNC_FLAG_END == func_flag) {
             depth--;
-        }
-        if (dirty_found) {
-            if (SUCCESS != mem_reset_dirty()) {
-                return FAILURE;
-            }
         }
     }
 
