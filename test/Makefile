@@ -37,5 +37,5 @@ tester_func.o: tester_func.c tester.h
 	$(CC) -I../jsonapi -g -c -o $@ tester_func.c -I..
 
 clean:
-	rm -f $(TESTBINS) *.o *.fr* test.log tester lex.yy.c y.tab.c y.tab.h
+	rm -f $(TESTBINS) *.o *.fr* test.log tester lex.yy.c y.tab.c y.tab.h core.*
 

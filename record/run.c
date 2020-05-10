@@ -168,7 +168,7 @@ int record(char *fr_path, char *params[]) {
 
             if (WIFSTOPPED(wait_status)) {
                 signum = WSTOPSIG(wait_status);
-                /* wait until BPF callback increments the semaphore so it is safe to process memory */
+                /* wait until BPF callback releases the mutex so it is safe to process memory */
                 int ret = pthread_mutex_lock(&cachedmem_access);
                 if (ret) {
                     ERR("Error locking mutex: %s", strerror(ret));
@@ -425,7 +425,7 @@ int process_breakpoint(pid_t pid) {
         return FAILURE;
     }
 
-    if (FUNC_FLAG_START != func_flag) {
+    if (FUNC_FLAG_START != func_flag || 1 == step_id) {
         if (SUCCESS != process_dirty(step_id)) {
             return FAILURE;
         }
@@ -518,6 +518,7 @@ void bpf_callback(void *unused, void *data, int data_size) {
 
     struct bpf_event *event = data;
     if (BPF_EVT_SIGNAL == event->type) {
+        INFO("signal %" PRId64, event->payload);
         if (locked) {
             INFO("unlocking");
             int ret = pthread_mutex_unlock(&cachedmem_access);
@@ -540,6 +541,7 @@ void bpf_callback(void *unused, void *data, int data_size) {
     
     switch (event->type) {
         case BPF_EVT_PAGEFAULT:
+            INFO("Page fault at %" PRIx64, event->payload);
             mark_dirty(event->payload);
             break;
         case BPF_EVT_MMAPENTRY:

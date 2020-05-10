@@ -28,6 +28,7 @@
  **************************************************************************/
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdalign.h>
 #include <unistd.h>
 #include <inttypes.h>
 #include <sys/types.h>
@@ -90,15 +91,13 @@ int init_cache(pid_t pid) {
     memisset = best_memisset(MEM_SEGMENT_SIZE);
     child_pid = pid;
 
-    if (!*exe_name) {   // read executable name from /proc/<pid>/exe - executed once
-        snprintf(tmp, sizeof(tmp), "/proc/%d/exe", pid);
-        ssize_t res = readlink(tmp, exe_name, sizeof(exe_name) - 1);
-        if (res < 0) {
-            ERR("Cannot get executable name from '%s': %s", tmp, strerror(errno));
-            return FAILURE;
-        }
-        exe_name[res] = '\0';
+    snprintf(tmp, sizeof(tmp), "/proc/%d/exe", pid);
+    ssize_t res = readlink(tmp, exe_name, sizeof(exe_name) - 1);
+    if (res < 0) {
+        ERR("Cannot get executable name from '%s': %s", tmp, strerror(errno));
+        return FAILURE;
     }
+    exe_name[res] = '\0';
 
     snprintf(tmp, sizeof(tmp), "/proc/%d/maps", pid);
     FILE *maps = fopen(tmp, "r");
@@ -186,7 +185,7 @@ void mark_dirty(uint64_t address) {
 }
 
 
-#define CHECK_PAGE(I) if (eight_pages & (0x80 >> (I))) { \
+#define CHECK_PAGE(I) if (_8pages & (0x80 >> (I))) { \
     page_offset = PAGE_SIZE * (page_index + (I)); \
     process_page(cache[i].start + page_offset, cache[i].pages + page_offset, step); \
 }
@@ -207,24 +206,21 @@ void mark_dirty(uint64_t address) {
  *
  **************************************************************************/
 int process_dirty(uint64_t step) {
-    uint32_t dirty_pages;
     unsigned int i, j, k;
     unsigned int page_index;
-    char eight_pages;
     uint64_t page_offset;
 
     for (i = 0; i < reg_count; i++) {
-        if (cache[i].flags & FLAG_DIRTY) {
-            for (j = 0; j < cache[i].page_count; j += MEM_SEGMENT_SIZE) {
-                /* check MEM_SEGMENT_SIZE*8 number of pages */
-                dirty_pages = memisset(cache[i].bitmap + j, MEM_SEGMENT_SIZE);
-                if (dirty_pages) {
-                    /* each bit of dirty_pages means 8 pages */
-                    for (k = 0; k < sizeof(uint32_t) * 8 ; k++) {
-                        if (dirty_pages & (1 << k)) {
-                            page_index = j + k*8;
-                            eight_pages = cache[i].bitmap[page_index];
-                            /* unrolled loop */
+        if (cache[i].flags & FLAG_DIRTY) {      // some pages in the region are dirty
+            div_t res = div(cache[i].page_count, 8);
+            unsigned int slots = res.quot + (res.rem ? 1 : 0);     // each slot is 1 byte representing 8 pages
+            for (j = 0; j < slots; j += sizeof(uint64_t)) {
+                uint64_t _64pages = *(uint64_t *)(cache[i].bitmap + j);
+                if (_64pages) {                 // one of 64 checked pages dirty
+                    for (k = 0; k < 8; k++) {
+                        char _8pages = cache[i].bitmap[j+k];
+                        if (_8pages) {          // one of 8 pages dirty
+                            page_index = (j+k) * 8;     // page number from bit position
                             CHECK_PAGE(0);
                             CHECK_PAGE(1);
                             CHECK_PAGE(2);
@@ -276,7 +272,8 @@ int process_dirty(uint64_t step) {
  *
  **************************************************************************/
 void process_page(uint64_t address, char *cached, uint64_t step_id) {
-    char buffer[MEM_SEGMENT_SIZE];
+    /* buffer must be aligned to allow fast vector instructions */
+    alignas(MEM_SEGMENT_SIZE) char buffer[MEM_SEGMENT_SIZE];
     struct iovec local = {buffer, MEM_SEGMENT_SIZE};
     struct iovec child = {(void *)address, MEM_SEGMENT_SIZE};
 
@@ -292,11 +289,13 @@ void process_page(uint64_t address, char *cached, uint64_t step_id) {
 
             /* store memory change event in DB using workier */
             struct insert_mem_msg *msg = malloc(sizeof(*msg));
-            msg->address = address;
+            msg->address = cur;
             msg->step_id = step_id;
             memcpy(msg->content, buffer, MEM_SEGMENT_SIZE);
             ch_write(insert_mem_ch, (char *)msg, sizeof(*msg));    // channel reader will free msg
         }
+        child.iov_base = (void *)cur;
+        cached += MEM_SEGMENT_SIZE;
     }
 }
 
@@ -331,7 +330,7 @@ void cache_add_region(uint64_t address, uint64_t size) {
             /* copy regions preceeding the new one */
             memcpy(cache, tmp, sizeof(*cache) * index);
         }
-        if (index < reg_count) {
+        if (index < (reg_count-1)) {
             /* copy regions following the new one */
             memcpy(cache + sizeof(*cache) * (index + 1), tmp + sizeof(*cache) * index, sizeof(*cache) * (reg_count - index));
         }
@@ -341,27 +340,21 @@ void cache_add_region(uint64_t address, uint64_t size) {
     new_reg->start = address;
     new_reg->end = address + size;
     new_reg->page_count = size / PAGE_SIZE;     // size if always divisible by PAGE_SIZE because mem allocated in pages
-    new_reg->flags = 0;
-    int bitmap_size = new_reg->page_count / 8;
-    int remainder = new_reg->page_count % 8;
-    if (remainder) {
-        bitmap_size++;  // page count isn't divisible by 8, add one extra byte
+    new_reg->flags = FLAG_DIRTY;
+    /* bitmap must be divisible by 8 to speed up processing */
+    new_reg->bitmap = calloc(new_reg->page_count / 64 + (new_reg->page_count % 64 ? 1 : 0), sizeof(uint64_t));     // allocate enough 8-byte chunks, each for 64 pages
+    /* Set 1 for existing pages (all padding bits should be 0s) to force caching of new pages */
+    div_t res = div(new_reg->page_count, 8);
+    memset(new_reg->bitmap, 0xFF, res.quot);
+    if (res.rem) {
+        int mask = 0;
+        for (int i = 0; i < res.rem; i++) {
+            mask |= 0x80 >> i;
+        }
+        new_reg->bitmap[res.quot] = mask;
     }
-    if (bitmap_size % MEM_SEGMENT_SIZE) {
-        /* add padding to use vector instructions - bitmap size must be divisible by MEM_SEGMENT_SIZE */
-        bitmap_size += MEM_SEGMENT_SIZE - bitmap_size % MEM_SEGMENT_SIZE;
-    }
+
     /* it is important to use aligned momory as CPU instructions used by memdiff operates with aligned memory */
     posix_memalign((void **)&new_reg->pages, MEM_SEGMENT_SIZE, size);
     memset(new_reg->pages, 0, size);
-    posix_memalign((void **)&new_reg->bitmap, MEM_SEGMENT_SIZE, bitmap_size);
-    /* Set 1 for existing pages (all padding bits should be 0s) to force caching of new pages */
-    memset(new_reg->bitmap, 0xFF, new_reg->page_count / 8);
-    if (remainder) {
-        int mask = 0;
-        for (int i = 0; i < remainder; i++) {
-            mask = mask < 1 + 1;
-        }
-        new_reg->bitmap[new_reg->page_count / 8] = mask;
-    }
 }

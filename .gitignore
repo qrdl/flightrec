@@ -9,7 +9,7 @@ examine/cmd_hash.c
 *.fr-shm
 *.fr-wal
 .vscode/settings.json
-core
+core.*
 *.log
 test/tester
 y.tab.c
