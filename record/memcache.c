@@ -136,6 +136,7 @@ int init_cache(pid_t pid) {
                 continue;
             }
             cache_add_region(head, tail-head);
+            INFO("Added region at %" PRIx64 " for %" PRId64, head, tail-head);
         }
     }
     fclose(maps);
@@ -179,13 +180,13 @@ void mark_dirty(uint64_t address) {
         return;
     }
     int page_num = (address - cache[index].start) / PAGE_SIZE;
-    char mask = 1 << (page_num % 8);
+    char mask = 0x80 >> (page_num % 8 - 1);
     cache[index].bitmap[page_num / 8] |= mask;
     cache[index].flags = FLAG_DIRTY;
 }
 
 
-#define CHECK_PAGE(I) if (eight_pages & (1 << (I))) { \
+#define CHECK_PAGE(I) if (eight_pages & (0x80 >> (I))) { \
     page_offset = PAGE_SIZE * (page_index + (I)); \
     process_page(cache[i].start + page_offset, cache[i].pages + page_offset, step); \
 }

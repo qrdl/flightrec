@@ -6,7 +6,7 @@
             "type": "cppdbg",
             "request": "launch",
             "program": "${workspaceFolder}/record/fr_record",
-            "args": [ "--", "${workspaceFolder}/test/test" ],
+            "args": [ "--", "${workspaceFolder}/test/test1" ],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}/test",
             "environment": [],

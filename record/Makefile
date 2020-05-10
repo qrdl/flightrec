@@ -27,14 +27,22 @@
 #
 ##########################################################################
 CFLAGS := -D_GNU_SOURCE -Wall -Wextra -g -I../stingray -I../dab -I..
-LDLIBS := -lsqlite3 -ldwarf -lelf
 LDFLAGS := -pthread
+
+# libbpf package adds either libbpf or libbcc library
+ifeq (,$(findstring libbpf,$(shell /sbin/ldconfig -p)))
+    LIBBPF = -lbcc
+else
+    LIBBPF = -lbpf
+endif
+LDLIBS := -lsqlite3 -ldwarf -lelf $(LIBBPF)
+
 
 .PHONY : all clean depend
 
 DEPEND = ../dab/dab.o ../stingray/stingray.o
 OBJFILES = record.o db.o run.o dbginfo.o memdiff.o mem.o channel.o workers.o \
-	memcache.o
+	memcache.o bpf.o
 
 all: fr_record fr_preload.so
 
@@ -49,10 +57,6 @@ fr_preload.so: preload.c
 memdiff.o: memdiff.c
 # explicitly allow support for AVX512. Actual decision re using AVX512 or AVX2 or SSE2 is made at runtime
 	$(CC) $(CFLAGS) -march=native -c memdiff.c -o $@
-
-mem.o: mem.c
-# explicitly allow support for AVX. Actual decision re using AVX is made at runtime
-	$(CC) $(CFLAGS) -c mem.c -o $@
 
 clean:
 	rm -f fr_record fr_preload.so $(OBJFILES) core

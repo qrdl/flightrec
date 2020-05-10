@@ -55,6 +55,7 @@
 #include "memcache.h"
 #include "channel.h"
 #include "workers.h"
+#include "bpf.h"
 
 #ifdef __x86_64__
 #define IP(A)   A.rip
@@ -71,16 +72,19 @@ static void set_ip(pid_t, REG_TYPE ip);
 static int set_breakpoints(pid_t pid);
 static int process_breakpoint(pid_t pid);
 
+static void bpf_callback(void *cookie, void *data, int data_size);
+
 unsigned long page_size;
 int fifo_fd = 0;
 
 static struct channel *insert_step_ch;
 static struct channel *insert_heap_ch;
-struct channel *insert_mem_ch;          // not static because is used in mem.c
+struct channel *insert_mem_ch;          // not-static because is used in memcache.c
 /* child program base address. Addresses from debug info may or may not contain base address, so if accessing child
    memory fails, assume addresses need to be adjusted by base address */
 static uint64_t base_address = 0;
-
+/* this mutex is used to sync access to cached memory between main loop and bpf_callback() */
+static pthread_mutex_t cachedmem_access = PTHREAD_MUTEX_INITIALIZER;
 
 /**************************************************************************
  *
@@ -149,7 +153,10 @@ int record(char *fr_path, char *params[]) {
             return FAILURE;
         }
 
-        /* TODO load BPF programs to monitor page faults and mmap/munmap/brk syscalls */
+        /* load BPF programs to monitor page faults, signals and mmap/munmap/brk syscalls */
+        if (SUCCESS != bpf_start(pid, bpf_callback)) {
+            return FAILURE;
+        }
 
         while (-1 != ptrace(PTRACE_CONT, pid, NULL, NULL)) {
             waitpid(pid, &wait_status, 0);      // wait for SIGTRAP from child, indicating the breakpoint
@@ -161,13 +168,23 @@ int record(char *fr_path, char *params[]) {
 
             if (WIFSTOPPED(wait_status)) {
                 signum = WSTOPSIG(wait_status);
-                if (SIGTRAP == signum) {
-                    if (SUCCESS != process_breakpoint(pid)) {
-                        return FAILURE;
-                    }
-                } else {
-                    INFO("child stopped - sig %d", signum);
-                    break;                          // child exited ok
+                /* wait until BPF callback increments the semaphore so it is safe to process memory */
+                int ret = pthread_mutex_lock(&cachedmem_access);
+                if (ret) {
+                    ERR("Error locking mutex: %s", strerror(ret));
+                    return FAILURE;
+                }
+                if (SUCCESS != process_breakpoint(pid)) {
+                    return FAILURE;
+                }
+                ret = pthread_mutex_unlock(&cachedmem_access);
+                if (ret) {
+                    ERR("Error unlocking mutex: %s", strerror(ret));
+                    return FAILURE;
+                }
+                if (SIGTRAP != signum) {
+                    INFO("Child stopped - sig %d", signum);
+                    break;
                 }
             } else {
                 // TODO: can we get here?
@@ -175,6 +192,7 @@ int record(char *fr_path, char *params[]) {
                 return FAILURE;
             }
         }
+        bpf_stop();
 
         INFO("Waiting for worker threads to finish");
 
@@ -476,3 +494,65 @@ void set_ip(pid_t pid, REG_TYPE ip) {
     }
 }
 
+
+/**************************************************************************
+ *
+ *  Function:   bpf_callback
+ *
+ *  Params:     unused
+ *              data - message
+ *              data_size - message size
+ *
+ *  Return:     N/A
+ *
+ *  Descr:      Process messages form BPF programs
+ *
+ **************************************************************************/
+void bpf_callback(void *unused, void *data, int data_size) {
+    (void)unused;
+    (void)data_size;
+    /* I assume that MMAPENTRY is always followed by MMAPEXIT, so saving size from ENTRY
+       to use it when got EXIT */
+    static uint64_t mapped_size = 0;
+    static int locked = 0;
+
+    struct bpf_event *event = data;
+    if (BPF_EVT_SIGNAL == event->type) {
+        if (locked) {
+            INFO("unlocking");
+            int ret = pthread_mutex_unlock(&cachedmem_access);
+            if (ret) {
+                ERR("Error unlocking mutex: %s", strerror(ret));
+                return;
+            }
+            locked = 0;
+        }
+        return;
+    } else if (!locked) {
+        INFO("locking");
+        int ret = pthread_mutex_lock(&cachedmem_access);
+        if (ret) {
+            ERR("Error locking mutex: %s", strerror(ret));
+            return;
+        }
+        locked = 1;
+    }
+    
+    switch (event->type) {
+        case BPF_EVT_PAGEFAULT:
+            mark_dirty(event->payload);
+            break;
+        case BPF_EVT_MMAPENTRY:
+            mapped_size = event->payload;
+            break;
+        case BPF_EVT_MMAPEXIT:
+            INFO("New map at %" PRIx64 " for %" PRId64, event->payload, mapped_size);
+            cache_add_region(event->payload, mapped_size);
+            break;
+        case BPF_EVT_MUNMAP:
+            INFO("Unmap at %" PRIx64, event->payload);
+            break;
+        default:
+            WARN("Inknown event type %" PRId64 "\n", event->type);
+    }
+}
