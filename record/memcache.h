@@ -35,6 +35,7 @@
 int init_cache(pid_t pid);
 void cache_add_region(uint64_t start, uint64_t size);
 void mark_dirty(uint64_t address);
+void reset_dirty(void);
 int process_dirty(uint64_t step);
 
 #endif

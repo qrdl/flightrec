@@ -191,6 +191,7 @@ int record(char *fr_path, char *params[]) {
                 ERR("Unsupported wait status %d", wait_status);
                 return FAILURE;
             }
+            usleep(1000);
         }
         bpf_stop();
 
@@ -362,12 +363,11 @@ int process_breakpoint(pid_t pid) {
     int func_flag;
     int scope_id;
 
-
     /* Get registers */
     struct user_regs_struct regs;
     if (-1 == ptrace(PTRACE_GETREGS, pid, NULL, &regs)) {
         printf("Cannot read process registers - %s\n", strerror(errno));
-        exit(EXIT_FAILURE);
+        return FAILURE;
     }
 
     REG_TYPE pc = IP(regs) - 1;       // program counter at breakpoint, before it processed the TRAP
@@ -395,6 +395,7 @@ int process_breakpoint(pid_t pid) {
 
     /* Store new step using worker */
     ULONG step_id = ++counter;
+    INFO("Step %" PRId64, step_id);
     struct insert_step_msg *msg = malloc(sizeof(*msg));
     msg->step_id = step_id;
     msg->file_id = fid;
@@ -464,6 +465,7 @@ int process_breakpoint(pid_t pid) {
         ERR("Cannot update child code - %s", strerror(errno));
         return FAILURE;
     }
+    reset_dirty();
 
     return SUCCESS;
 }
@@ -518,8 +520,8 @@ void bpf_callback(void *unused, void *data, int data_size) {
 
     struct bpf_event *event = data;
     if (BPF_EVT_SIGNAL == event->type) {
-        INFO("signal %" PRId64, event->payload);
-        if (locked) {
+//        INFO("signal %" PRId64, event->payload);
+        if (locked && SIGTRAP == event->payload) {
             INFO("unlocking");
             int ret = pthread_mutex_unlock(&cachedmem_access);
             if (ret) {
@@ -541,7 +543,7 @@ void bpf_callback(void *unused, void *data, int data_size) {
     
     switch (event->type) {
         case BPF_EVT_PAGEFAULT:
-            INFO("Page fault at %" PRIx64, event->payload);
+//            INFO("Page fault at %" PRIx64, event->payload);
             mark_dirty(event->payload);
             break;
         case BPF_EVT_MMAPENTRY:

@@ -165,18 +165,18 @@ void mark_dirty(uint64_t address) {
     /* I don't want to use bsearch() to avoid extra function calls */
     int left = 0;
     int right = reg_count;
-    for (index = reg_count / 2; right > left; index = (left + right) / 2) {
+    for (index = reg_count / 2; ; index = (left + right + 1) / 2) {
         if (address < cache[index].start) {
+            if (index == right) {
+                WARN("Address %lx not found in cache", address);
+                return;
+            }
             right = index;
         } else if (address > cache[index].end) {
             left = index;
         } else {
             break;
         }
-    }
-    if (right == left) {
-        WARN("Address %lx not found in cache", address);
-        return;
     }
     int page_num = (address - cache[index].start) / PAGE_SIZE;
     char mask = 0x80 >> (page_num % 8 - 1);
@@ -238,22 +238,36 @@ int process_dirty(uint64_t step) {
         }
     }
 
-    /* reset system dirty flag for all memory pages to force page faults on any change */
+    return SUCCESS;
+}
+
+
+/**************************************************************************
+ *
+ *  Function:   reset_dirty
+ *
+ *  Params:     N/A
+ *
+ *  Return:     N/A
+ *
+ *  Descr:      Reset system dirty flag for all memory pages to force page
+ *              faults on any change
+ *
+ **************************************************************************/
+void reset_dirty(void) {
     // TODO Can I keep the file opened to avoid opening/closing every time?
     FILE *clear_refs = fopen(clear_refs_filename, "w");
     if (!clear_refs) {
         ERR("Cannot open file '%s': %s", clear_refs_filename, strerror(errno));
-        return FAILURE;
+        return;
     }
     char buf = '4';     // '4' resets soft-dirty bits
     if (!fwrite(&buf, 1, 1, clear_refs)) {
         ERR("Cannot write to file '%s'", clear_refs_filename);
         fclose(clear_refs);
-        return FAILURE;
+        return;
     }
     fclose(clear_refs);
-
-    return SUCCESS;
 }
 
 

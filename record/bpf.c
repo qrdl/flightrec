@@ -93,7 +93,7 @@ int bpf_start(pid_t pid, void (* callback)(void *, void *, int)) {
             "perf_map",
             sizeof(uint32_t),   // key size
             sizeof(uint32_t),   // value size
-            65536,              // max entries
+            1024,              // max entries
             0);                 // flags
     if (map_fd < 0) {
         ERR("Failed to create map: %s", strerror(errno));
@@ -139,7 +139,6 @@ int bpf_start(pid_t pid, void (* callback)(void *, void *, int)) {
     BPF_PROG_LOAD(BPF_EVT_MMAPEXIT, "syscalls", "sys_exit_mmap", 16);
     BPF_PROG_LOAD(BPF_EVT_MUNMAP, "syscalls", "sys_enter_munmap", 16);
     BPF_PROG_LOAD(BPF_EVT_SIGNAL, "signal", "signal_generate", 8);
-    BPF_PROG_LOAD(BPF_EVT_SIGNAL, "signal", "signal_deliver", 8);
 
     /* specifying any CPU (value -1) doesn't work, so need to create a reader for every CPU */
     cpu_count = get_nprocs();
@@ -152,7 +151,7 @@ int bpf_start(pid_t pid, void (* callback)(void *, void *, int)) {
                 NULL,
                 pid,                    // pid, seems to be ignored
                 cpu,                    // CPU
-                64);                    // page count
+                256);                   // page count
         if (!reader) {
             ERR("Error creating perf event buffer: %s", strerror(errno));
             return FAILURE;
@@ -187,6 +186,7 @@ int bpf_start(pid_t pid, void (* callback)(void *, void *, int)) {
  *
  **************************************************************************/
 void bpf_stop(void) {
+    INFO("stopping BPF thread");
     pthread_cancel(worker_thread);
 
     for (int i = 0; i < cpu_count; i++) {
@@ -214,8 +214,9 @@ void bpf_stop(void) {
  **************************************************************************/
 void *bpf_poller(void *unused) {
     (void)unused;
-    /* there is no normal exit from this loop, it  */
+    /* there is no normal exit from this loop, it runs until thread is cancelled externally */
     for (;;) {
+//        INFO("poll");
         perf_reader_poll(cpu_count, reader, -1);
     }
 
@@ -303,6 +304,7 @@ void lost_event(uint64_t count) {
 #ifdef UNITTEST
 
 static void process_event(void *cb_cookie, void *raw, int raw_size) {
+    static int counter;
     struct bpf_event *event = raw;
     int hi, lo;
 
@@ -317,41 +319,30 @@ static void process_event(void *cb_cookie, void *raw, int raw_size) {
             printf("mmap returned address %" PRIx64 "\n", event->payload);
             break;
         case BPF_EVT_SIGNAL:
-            hi = event->payload >> 32;
-            lo = event->payload & 0xFFFFFFFF;
-            printf("child got signal %d:%d\n", hi, lo);
+            printf("[%d] child got signal %ld\n", ++counter, event->payload);
             break;
         default:
             printf("Invalid event type %" PRId64 "\n", event->type);
     }
 }
 
-int global_var;
-
 FILE *logfd;
 
-int main(void) {
+int main(int argc, char *argv[]) {
     logfd = stderr;
+    if (argc < 2) {
+        printf("Usage: %s <program>\n", argv[0]);
+        return EXIT_FAILURE;
+    }
     pid_t pid = fork();
     if (!pid) {
-        int stack_var;
-
-        printf("global_var %p\n", &global_var);
-        global_var = getchar();
-
-        printf("stack_var %p\n", &stack_var);
-        stack_var = getchar();
-
-        int *heap_var;
-        printf("heap_var %p\n", &heap_var);
-        getchar();
-        heap_var = malloc(8192);
-        printf("heap_var value %p\n", heap_var);
-        memset(heap_var, 0, 8192);
-
         sleep(1);
-
-        exit(0);
+        char **args = malloc(2 * sizeof(*args));
+        args[0] = argv[1];
+        args[1] = NULL;
+        execvp(args[0], args);
+        printf("Error executing program\n");
+        exit(1);
     }
 
     printf("Child PID is %d\n", pid);
@@ -362,7 +353,8 @@ int main(void) {
         return EXIT_FAILURE;
     }
 
-    sleep(3600);
+    int waitstatus;
+    waitpid(pid, &waitstatus, 0);
 
     return EXIT_SUCCESS;
 }
