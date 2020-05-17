@@ -482,7 +482,7 @@ int prepare_statements(void) {
                 "offset = ?")) {
         return FAILURE;
     }
-
+/*
     if (DAB_OK != DAB_CURSOR_PREPARE(&select_line, "SELECT "
                     "file_id, "
                     "line, "
@@ -495,7 +495,7 @@ int prepare_statements(void) {
                     "address = ?")) {
         return FAILURE;
     }
-
+*/
     return SUCCESS;
 }
 

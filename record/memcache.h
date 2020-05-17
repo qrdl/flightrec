@@ -38,4 +38,6 @@ void mark_dirty(uint64_t address);
 void reset_dirty(void);
 int process_dirty(uint64_t step);
 
+extern char mem_dirty;
+
 #endif

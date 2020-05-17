@@ -67,19 +67,21 @@ void *wrk_insert_step(void *arg) {
 
     if (DAB_OK != DAB_EXEC("CREATE TABLE step ("
                                 "id             INTEGER PRIMARY KEY AUTOINCREMENT, "
-                                "file_id        INTEGER NOT NULL, "     // ref file.id
-                                "line           INTEGER NOT NULL, "
+                                "address        INTEGER NOT NULL, "
+                                "file_id        INTEGER, "      // ref file.id
+                                "line           INTEGER, "
                                 "depth          INTEGER, "
-                                "function_id    INTEGER, "              // ref function.id
+                                "function_id    INTEGER, "     // ref function.id
                                 "regs           BLOB"
                             ")")) {
         return NULL;
     }
 
+    /* file_id and line are filled later, from address */
     if (DAB_OK != DAB_CURSOR_PREPARE(&insert, "INSERT "
                     "INTO step "
-                    "(id, file_id, line, depth, function_id, regs) VALUES "
-                    "(?,  ?,       ?,    ?,     ?,           ?)")) {
+                    "(id, address, depth, function_id, regs) VALUES "
+                    "(?,  ?,       ?,     ?,           ?)")) {
         return NULL;
     }
 
@@ -96,8 +98,7 @@ void *wrk_insert_step(void *arg) {
         registers.size = registers.len = sizeof(msg->regs);
         if (DAB_OK != DAB_CURSOR_BIND(insert,
                 msg->step_id,
-                msg->file_id,
-                msg->line,
+                msg->address,
                 msg->depth,
                 msg->func_id,
                 &registers)) {
@@ -136,6 +137,8 @@ void *wrk_insert_step(void *arg) {
     if (DAB_OK != DAB_EXEC("CREATE TABLE fr.step AS SELECT * FROM main.step")) {
         return NULL;
     }
+
+    // TODO resolve file and line by address
 
     DAB_CLOSE(DAB_FLAG_NONE);
 

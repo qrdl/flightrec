@@ -72,11 +72,12 @@ extern void *insert_var_decl;
 extern void *update_var_loc;
 extern void *insert_array;
 extern void *select_type;
-extern void *select_line;
+//extern void *select_line;
 
 extern FILE            *logfd;
 extern char            *acceptable_path;
 extern struct entry    *ignore_unit;
 extern struct entry    *process_unit;
+extern int unit_count;
 
 #endif

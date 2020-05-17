@@ -78,6 +78,7 @@ static int proc_aggr_member(Dwarf_Debug dbg, Dwarf_Die parent_die, ULONG unit_id
 static int proc_enum_item(Dwarf_Debug dbg, Dwarf_Die parent_die, ULONG unit_id, Dwarf_Off offset);
 static int proc_var(Dwarf_Debug dbg, Dwarf_Die die, ULONG scope_id, ULONG unit_id);
 
+int unit_count;
 
 static int get_attrs(Dwarf_Debug dbg, Dwarf_Die die, struct die_attr*attr_list);
 static void cleanup_attrs(Dwarf_Debug dbg, struct die_attr *attr_list);
@@ -131,13 +132,12 @@ int dbg_srcinfo(char *name) {
         RETCLEAN(FAILURE);
     }
 
-    int count;
     printf("Collecting debug info ... ");
     fflush(stdout);
-    for (count = 0; SUCCESS == (ret = proc_unit(dbg)); count++);
+    while (SUCCESS == (ret = proc_unit(dbg)));
     if (END == ret) {
         ret = SUCCESS;   // all units processed ok
-        printf("%d units processed ok\n", count);
+        printf("%d units processed ok\n", unit_count);
     }
 
     if (SUCCESS != alter_db()) {
@@ -241,6 +241,7 @@ int proc_unit(Dwarf_Debug dbg) {
     }
 
     DBG("Processing unit %s", name);
+    unit_count++;
     if (DAB_OK != DAB_BEGIN) {
         RETCLEAN(FAILURE);
     } else {

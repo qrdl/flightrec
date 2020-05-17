@@ -62,10 +62,9 @@
 
 struct insert_step_msg {
     ULONG                       step_id;
-    ULONG                       file_id;
-    ULONG                       line;
     ULONG                       depth;
     ULONG                       func_id;
+    ULONG                       address;
     struct user_regs_struct     regs;
 };
 

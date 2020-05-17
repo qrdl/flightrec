@@ -67,9 +67,10 @@ static unsigned int reg_count;
 static pid_t child_pid;
 static FILE *clear_refs;
 
+char mem_dirty;
+
 /* function pointers for best memory comparison functions, based on available CPU features and size */
 int (* memdiff)(const char *buf1, const char *buf2, size_t count);
-uint32_t (* memisset)(const char *buf, size_t count);
 
 /**************************************************************************
  *
@@ -88,7 +89,6 @@ int init_cache(pid_t pid) {
     char tmp[256];
 
     memdiff = best_memdiff(MEM_SEGMENT_SIZE);
-    memisset = best_memisset(MEM_SEGMENT_SIZE);
     child_pid = pid;
 
     snprintf(tmp, sizeof(tmp), "/proc/%d/exe", pid);
@@ -186,6 +186,7 @@ void mark_dirty(uint64_t address) {
     char mask = 0x80 >> (page_num % 8);
     cache[index].bitmap[page_num / 8] |= mask;
     cache[index].flags = FLAG_DIRTY;
+    mem_dirty = FLAG_DIRTY;
 }
 
 
@@ -268,6 +269,7 @@ void reset_dirty(void) {
         ERR("Cannot write to clear_refs file");
         return;
     }
+    mem_dirty = 0;
 }
 
 

@@ -37,6 +37,7 @@
 #include <errno.h>
 #include <signal.h>
 #include <sys/uio.h>
+#include <sys/user.h>
 #include <inttypes.h>
 #include <pthread.h>
 // for P_tmpdir
@@ -68,23 +69,38 @@
 #define FUNC_FLAG_START     1
 #define FUNC_FLAG_END       2
 
+/* SQLite performance isn't good enough so I use my own cache. Steps within unit are sorted by address so I can
+   approximate the location of needed entry faster than logN */
+struct cached_line {
+    uint64_t    address;
+    uint64_t    func_id;
+    char        func_flag;
+    REG_TYPE    org_instr;
+};
+struct cached_unit {
+    uint64_t            start;      // address of first line in unit
+    uint64_t            end;        // address of last line in unit
+    uint64_t            line_count;
+    struct cached_line  *lines;
+};
+
 static void set_ip(pid_t, REG_TYPE ip);
 static int set_breakpoints(pid_t pid);
 static int process_breakpoint(pid_t pid);
+static struct cached_line *lookup_cache(uint64_t address);
 
 static void bpf_callback(void *cookie, void *data, int data_size);
 
-unsigned long page_size;
-int fifo_fd = 0;
-
-static struct channel *insert_step_ch;
-static struct channel *insert_heap_ch;
-struct channel *insert_mem_ch;          // not-static because is used in memcache.c
+static int fifo_fd = 0;                 // FIFO for receiving alloc/free events from fr_preload.so
+static struct channel *insert_step_ch;  // Channel for communicationg with step insertion worker
+static struct channel *insert_heap_ch;  // Channel for communicationg with heap event insertion worker
+struct channel *insert_mem_ch;          // Channel for communicationg with mem insertion worker, not-static because is used in memcache.c
 /* child program base address. Addresses from debug info may or may not contain base address, so if accessing child
    memory fails, assume addresses need to be adjusted by base address */
 static uint64_t base_address = 0;
 /* this mutex is used to sync access to cached memory between main loop and bpf_callback() */
 static pthread_mutex_t cachedmem_access = PTHREAD_MUTEX_INITIALIZER;
+static struct cached_unit *instr_cache;
 
 /**************************************************************************
  *
@@ -259,38 +275,69 @@ int record(char *fr_path, char *params[]) {
  *
  *  Return:     SUCCESS / FAILURE
  *
- *  Descr:      Set breakpoints for all known source lines
+ *  Descr:      Set breakpoints for all known source lines, fill line
+ *              cache to be used in process_breakpoint
  *
  **************************************************************************/
 int set_breakpoints(pid_t pid) {
     int ret = SUCCESS;
-    void *cursor, *update_cursor = NULL;    // these statements are declared and used in-place because set_breakpoints() called just once
-    REG_TYPE address;
+    void *unit_cursor, *line_cursor;    // these statements are declared and used in-place because set_breakpoints() called just once
     REG_TYPE int3 = 0xCC;    // INT 3
-
-    if (DAB_OK != DAB_CURSOR_OPEN(&cursor, "SELECT "
-                "address, "
-                "rowid "
-            "FROM "
-                "statement "
-            "ORDER BY "
-                "file_id, "
-                "line")) {
-        return FAILURE;
-    }
-
-    if (DAB_OK != DAB_BEGIN) {
-        return FAILURE;
-    }
-
     int db_stat;
-    ULONG rowid;
-    while (DAB_OK == (db_stat = DAB_CURSOR_FETCH(cursor, &address, &rowid))) {
-        /* read one byte at specified address, remember it and replace with INT 3 instruction to cause TRAP */
-        REG_TYPE instr;
-        do {
+
+    if (DAB_OK != DAB_CURSOR_OPEN(&unit_cursor, "SELECT "
+                "file.unit_id, "
+                "count(*), "
+                "MIN(statement.address) AS start, "
+                "MAX(statement.address) "
+            "FROM "
+                "file "
+                "JOIN statement ON statement.file_id = file.id "
+            "GROUP BY "
+                "file.unit_id "
+            "ORDER BY "
+                "start")) {
+        return FAILURE;
+    }
+    if (DAB_OK != DAB_CURSOR_PREPARE(&line_cursor, "SELECT "
+                "address, "
+                "function_id, "
+                "func_flag "
+            "FROM "
+                "file "
+                "JOIN statement ON statement.file_id = file.id "
+            "WHERE "
+                "file.unit_id = ? "
+            "ORDER BY "
+                "address")) {
+        return FAILURE;
+    }
+
+    /* init opcode cache */
+    instr_cache = malloc(sizeof(*instr_cache) * unit_count);
+
+    uint64_t unit_id;
+    REG_TYPE instr;
+    for (   struct cached_unit *cur_unit = instr_cache;
+            DAB_OK == (db_stat = DAB_CURSOR_FETCH(  unit_cursor,
+                                                    &unit_id,
+                                                    &cur_unit->line_count,
+                                                    &cur_unit->start,
+                                                    &cur_unit->end));
+            cur_unit++) {
+        cur_unit->lines = malloc(sizeof(struct cached_line) * cur_unit->line_count);
+        DAB_CURSOR_RESET(line_cursor);
+        if (DAB_OK != DAB_CURSOR_BIND(line_cursor, unit_id)) {
+            return FAILURE;
+        }
+        for (   struct cached_line *cur_line = cur_unit->lines;
+                DAB_OK == (db_stat = DAB_CURSOR_FETCH(  line_cursor,
+                                                        &cur_line->address,
+                                                        &cur_line->func_id,
+                                                        &cur_line->func_flag));
+                cur_line++) {
             errno = 0;  // PTRACE_PEEKDATA can return anything, even -1, so use only errno for diag
-            instr = ptrace(PTRACE_PEEKDATA, pid, (void *)(address+base_address), NULL);
+            instr = ptrace(PTRACE_PEEKDATA, pid, (void *)(cur_line->address + base_address), NULL);
             if (errno) {
                 if ((EIO == errno || EFAULT == errno) && !base_address) {
                     /* may fail because address needs to be adjusted by base address */
@@ -311,33 +358,15 @@ int set_breakpoints(pid_t pid) {
                 ERR("Cannot peek at child code - %s", strerror(errno));
                 RETCLEAN(FAILURE);
             }
-	    break;
-        } while (1);
-        /* store original instruction in DB */
-        if (!update_cursor) {
-            if (DAB_OK != DAB_CURSOR_OPEN(&update_cursor,
-                    "UPDATE "
-                        "statement "
-                    "SET "
-                        "instr = ? "
-                    "WHERE "
-                        "rowid = ?",
-                    (instr & 0xFF), rowid)) {
-                RETCLEAN(FAILURE);
-            }
-        } else {
-            DAB_CURSOR_RESET(update_cursor);
-            if (DAB_OK != DAB_CURSOR_BIND(update_cursor, (instr & 0xFF), rowid)) {
+            cur_line->org_instr = instr;
+            /* update child code */
+            instr = (instr & ~0xFF) | int3;
+            if (-1 == ptrace(PTRACE_POKEDATA, pid, (void *)(cur_line->address + base_address), (void *)instr)) {
+                ERR("Cannot update child code - %s", strerror(errno));
                 RETCLEAN(FAILURE);
             }
         }
-        if (DAB_NO_DATA != DAB_CURSOR_FETCH(update_cursor)) {
-            RETCLEAN(FAILURE);
-        }
-        /* update child code */
-        instr = (instr & ~0xFF) | int3;
-        if (-1 == ptrace(PTRACE_POKEDATA, pid, (void *)(address+base_address), (void *)instr)) {
-            ERR("Cannot update child code - %s", strerror(errno));
+        if (DAB_NO_DATA != db_stat) {
             RETCLEAN(FAILURE);
         }
     }
@@ -346,14 +375,72 @@ int set_breakpoints(pid_t pid) {
     }
 
 cleanup:
-    DAB_CURSOR_FREE(cursor);
-    DAB_CURSOR_FREE(update_cursor);
-    if (SUCCESS == ret && DAB_OK == DAB_COMMIT) {
-        return SUCCESS;
-    }
-    DAB_ROLLBACK;
+    DAB_CURSOR_FREE(unit_cursor);
+    DAB_CURSOR_FREE(line_cursor);
 
     return ret;
+}
+
+
+/**************************************************************************
+ *
+ *  Function:   lookup_cache
+ *
+ *  Params:     address - statement address to look for
+ *
+ *  Return:     found cached entry / NULL if not found
+ *
+ *  Descr:      Find unit where address is located, within unit use
+ *              linear approximation to find the address
+ *
+ **************************************************************************/
+struct cached_line *lookup_cache(uint64_t address) {
+    static int unit;   // typically addresses come from the same unit
+    int index, left, right;
+
+    if (instr_cache[unit].start > address || instr_cache[unit].end < address) {
+        /* unit has changed - look for unit */
+        left = 0;
+        right = unit_count;     // search interval doesn't include right bound 
+        for (index = right / 2; right > left; index = (left + right) / 2) {
+            if (address < instr_cache[index].start) {
+                right = index;
+            } else if (address > instr_cache[index].end) {
+                left = index + 1;
+            } else {
+                break;
+            }
+        }
+        if (left == right) {
+            return NULL;
+        }
+        unit = index;
+    }
+
+    left = 0;
+    uint64_t left_addr = instr_cache[unit].lines[left].address;
+    right = instr_cache[unit].line_count - 1;   // search interval does include right bound
+    uint64_t right_addr = instr_cache[unit].lines[right].address;
+
+    while (right >= left) {     // because right bound is included, right and left can be equal
+        /* addresses are sequential and kinda uniformly distributed, so linear approximation
+           should do better than binary search */
+        index = left + (address - left_addr) * (right - left) / (right_addr - left_addr);
+        if (address < instr_cache[unit].lines[index].address) {
+            right = index - 1;
+            right_addr = instr_cache[unit].lines[right].address;
+        } else if (address > instr_cache[unit].lines[index].address) {
+            left = index + 1;
+            left_addr = instr_cache[unit].lines[left].address;
+        } else {
+            break;
+        }
+    }
+    if (left > right) {
+        return NULL;
+    }
+
+    return &instr_cache[unit].lines[index];
 }
 
 
@@ -368,13 +455,13 @@ cleanup:
  *  Descr:      Process the breakpoint:
  *              - store program step
  *              - check for any dynamic memory ops happened since prev step
- *              - check for any memory changes since prev step
+ *              - process memory changes reported since prev step
  *
  **************************************************************************/
 int process_breakpoint(pid_t pid) {
     static ULONG counter = 0;
-    static ULONG func_id = 0, depth = 0, old_func_id = 0;
-    int func_flag;
+    static ULONG depth = 0, func_id = 0;
+    REG_TYPE int3 = 0xCC;    // INT 3
 
     /* Get registers */
     struct user_regs_struct regs;
@@ -384,27 +471,21 @@ int process_breakpoint(pid_t pid) {
     }
 
     REG_TYPE pc = IP(regs) - 1;       // program counter at breakpoint, before it processed the TRAP
-    ULONG fid, line;
-    int saved;
 
-    DAB_CURSOR_RESET(select_line);
-    if (DAB_OK != DAB_CURSOR_BIND(select_line, pc - base_address)) {
+    struct cached_line *line = lookup_cache(pc - base_address);
+    if (!line) {
+        WARN("Cannot find statement for address 0x%" PRIx64, (uint64_t)pc - base_address);
         return FAILURE;
     }
 
-    if (DAB_OK != DAB_CURSOR_FETCH(select_line, &fid, &line, &saved, &func_id, &func_flag)) {
-        WARN("Cannot find statement by address %" PRIx64, (uint64_t)pc - base_address);
-        return FAILURE;
-    }
-
-    if (func_id != old_func_id || FUNC_FLAG_START == func_flag) {
-        if (FUNC_FLAG_START == func_flag) {
+    if (line->func_id != func_id || FUNC_FLAG_START == line->func_flag) {
+        if (FUNC_FLAG_START == line->func_flag) {
             depth++;        // got to the begining of the function - new function call
         }
         // depth for FUNC_FLAG_END will be decremented after processing the step
         // if not function call, we can get here as a result of return from function call or long jump
         // TODO handle long jump
-        old_func_id = func_id;
+        func_id = line->func_id;
     }
 
     /* Store new step using worker */
@@ -412,10 +493,9 @@ int process_breakpoint(pid_t pid) {
     DBG("Step %" PRId64, step_id);
     struct insert_step_msg *msg = malloc(sizeof(*msg));
     msg->step_id = step_id;
-    msg->file_id = fid;
-    msg->line = line;
     msg->depth = depth;
     msg->func_id = func_id;
+    msg->address = pc;
     msg->regs = regs;   // regs is struct, not a pointer, so it will be copied
     ch_write(insert_step_ch, (char *)msg, sizeof(*msg));    // channel reader will free msg
 
@@ -440,24 +520,17 @@ int process_breakpoint(pid_t pid) {
         return FAILURE;
     }
 
-    if (FUNC_FLAG_START != func_flag || 1 == step_id) {
-        if (SUCCESS != process_dirty(step_id)) {
+    if (FUNC_FLAG_START != line->func_flag || 1 == step_id) {
+        if (mem_dirty && SUCCESS != process_dirty(step_id)) {
             return FAILURE;
         }
-        if (FUNC_FLAG_END == func_flag) {
+        if (FUNC_FLAG_END == line->func_flag) {
             depth--;
         }
     }
 
-    errno = 0;  // PTRACE_PEEKDATA can return anything, even -1, so use only errno for diag
-    REG_TYPE instr = ptrace(PTRACE_PEEKDATA, pid, (void *)pc, NULL);
-    if (errno) {
-        ERR("Cannot peek at child code - %s", strerror(errno));
-        return FAILURE;
-    }
-
     /* restore original instruction, step over it */
-    if (-1 == ptrace(PTRACE_POKEDATA, pid, (void *)pc, (void *)((instr & ~0xFF) | saved))) {
+    if (-1 == ptrace(PTRACE_POKEDATA, pid, (void *)pc, (void *)line->org_instr)) {
         ERR("Cannot update child code - %s", strerror(errno));
         return FAILURE;
     }
@@ -475,11 +548,13 @@ int process_breakpoint(pid_t pid) {
     }
 
     /* re-instate TRAP */
-    if (-1 == ptrace(PTRACE_POKEDATA, pid, (void *)pc, (void *)instr)) {
+    if (-1 == ptrace(PTRACE_POKEDATA, pid, (void *)pc, (void *)((line->org_instr & ~0xFF) | int3))) {
         ERR("Cannot update child code - %s", strerror(errno));
         return FAILURE;
     }
-    reset_dirty();
+    if (mem_dirty) {
+        reset_dirty();
+    }
 
     return SUCCESS;
 }
