@@ -110,6 +110,7 @@ int create_db(void) {
         return FAILURE;
     }
 
+/*
     if (DAB_OK != DAB_EXEC("CREATE TABLE step ("
                                 "id             INTEGER PRIMARY KEY AUTOINCREMENT, "
                                 "file_id        INTEGER NOT NULL, "     // ref file.id
@@ -120,7 +121,7 @@ int create_db(void) {
                             ")")) {
         return FAILURE;
     }
-
+*/
     if (DAB_OK != DAB_EXEC("CREATE TABLE type ("
                                 "unit_id    INTEGER NOT NULL, "     // ref unit.id
                                 "offset     INTEGER NOT NULL, "     // that's how DWARF references parent types
@@ -487,8 +488,7 @@ int prepare_statements(void) {
                     "line, "
                     "instr, "
                     "function_id, "
-                    "func_flag, "
-                    "scope_id "
+                    "func_flag "
                 "FROM "
                     "statement "
                 "WHERE "

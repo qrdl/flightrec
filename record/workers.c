@@ -61,7 +61,18 @@ void *wrk_insert_step(void *arg) {
     void *insert;
     size_t counter = 0;
 
-    if (DAB_OK != DAB_OPEN(db_name, DAB_FLAG_NONE)) {     // already in multi-threaded mode
+    if (DAB_OK != DAB_OPEN(":memory:", DAB_FLAG_NONE)) {
+        return NULL;
+    }
+
+    if (DAB_OK != DAB_EXEC("CREATE TABLE step ("
+                                "id             INTEGER PRIMARY KEY AUTOINCREMENT, "
+                                "file_id        INTEGER NOT NULL, "     // ref file.id
+                                "line           INTEGER NOT NULL, "
+                                "depth          INTEGER, "
+                                "function_id    INTEGER, "              // ref function.id
+                                "regs           BLOB"
+                            ")")) {
         return NULL;
     }
 
@@ -83,7 +94,6 @@ void *wrk_insert_step(void *arg) {
         /* manualy assemble Stingray string to be used as BLOB */
         registers.val = (char *)&msg->regs;
         registers.size = registers.len = sizeof(msg->regs);
-
         if (DAB_OK != DAB_CURSOR_BIND(insert,
                 msg->step_id,
                 msg->file_id,
@@ -117,6 +127,16 @@ void *wrk_insert_step(void *arg) {
     }
 
     DAB_CURSOR_FREE(insert);
+
+    char tmp[256];
+    sprintf(tmp, "ATTACH '%s' AS fr", db_name);
+    if (DAB_OK != DAB_EXEC(tmp)) {
+        return NULL;
+    }
+    if (DAB_OK != DAB_EXEC("CREATE TABLE fr.step AS SELECT * FROM main.step")) {
+        return NULL;
+    }
+
     DAB_CLOSE(DAB_FLAG_NONE);
 
     return (void*)1;    // non-NULL means success
@@ -139,7 +159,7 @@ void *wrk_insert_heap(void *arg) {
     void *insert, *update;
     size_t counter = 0;
 
-    if (DAB_OK != DAB_OPEN(":memory:", DAB_FLAG_NONE)) {     // already in multi-threaded mode
+    if (DAB_OK != DAB_OPEN(":memory:", DAB_FLAG_NONE)) {
         return NULL;
     }
 
@@ -283,7 +303,6 @@ void *wrk_insert_mem(void *arg) {
         /* manualy assemble Stingray string to be used as BLOB */
         content.val = msg->content;
         content.size = content.len = sizeof(msg->content);
-
         if (DAB_OK != DAB_CURSOR_BIND(insert,
                 msg->address,
                 msg->step_id,

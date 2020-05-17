@@ -138,15 +138,22 @@ int main(int argc, char *argv[]) {
     }
 
     /* TODO Assume using WAL2 when it becomes available in SQLite */
-    if (DAB_UNEXPECTED != DAB_EXEC("PRAGMA journal_mode=WAL")) {    // PRAGMA returns data we are not interested in
+    /* Switch to fastest possible SQLite mode - without any recovery. Any failure may lead to corrupted DB,
+       but if Recorder failed data isn't usable anyway */
+    if (DAB_UNEXPECTED != DAB_EXEC("PRAGMA journal_mode=OFF")) {    // PRAGMA returns data we are not interested in
+        return EXIT_FAILURE;
+    }
+    if (DAB_OK != DAB_EXEC("PRAGMA synchronous=OFF")) {    // PRAGMA returns data we are not interested in
         return EXIT_FAILURE;
     }
 
     /* collect source file and line info */
+    TIMER_START;
     if (SUCCESS != dbg_srcinfo(argv[optind])) {
         ERR("Cannot process source file and line debug info");
         return EXIT_FAILURE;
     }
+    TIMER_STOP("Collection of dbg info");
 
     if (SUCCESS != record(dirname(strdup(argv[0])), &argv[optind])) {
         ERR("Program execution failed");

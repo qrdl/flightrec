@@ -138,6 +138,7 @@ int bpf_start(pid_t pid, void (* callback)(void *, void *, int)) {
     BPF_PROG_LOAD(BPF_EVT_MMAPENTRY, "syscalls", "sys_enter_mmap", 24);
     BPF_PROG_LOAD(BPF_EVT_MMAPEXIT, "syscalls", "sys_exit_mmap", 16);
     BPF_PROG_LOAD(BPF_EVT_MUNMAP, "syscalls", "sys_enter_munmap", 16);
+    BPF_PROG_LOAD(BPF_EVT_BRK, "syscalls", "sys_exit_brk", 16);
     BPF_PROG_LOAD(BPF_EVT_SIGNAL, "signal", "signal_generate", 8);
 
     /* specifying any CPU (value -1) doesn't work, so need to create a reader for every CPU */

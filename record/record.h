@@ -33,6 +33,21 @@
 
 #include "stingray.h"
 
+#ifdef TIMING
+#include <time.h>
+struct timespec timer_started;
+#define TIMER_START clock_gettime(CLOCK_MONOTONIC_RAW, &timer_started)
+#define TIMER_STOP(msg) do { \
+    struct timespec timer_stopped; \
+    clock_gettime(CLOCK_MONOTONIC_RAW, &timer_stopped); \
+    double diff = timer_stopped.tv_sec - timer_started.tv_sec + (timer_stopped.tv_nsec - timer_started.tv_nsec) / 1000000000.0; \
+    INFO("%s took %.3lf sec", msg, diff); \
+} while (0)
+#else
+#define TIMER_START
+#define TIMER_STOP(msg)
+#endif
+
 /* linked list, used for storing names of units to include/exclude */
 struct entry {
     char *name;

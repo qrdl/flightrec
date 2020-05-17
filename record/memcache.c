@@ -65,7 +65,7 @@ static struct region *cache;
 static unsigned int reg_count;
 
 static pid_t child_pid;
-static char *clear_refs_filename;
+static FILE *clear_refs;
 
 /* function pointers for best memory comparison functions, based on available CPU features and size */
 int (* memdiff)(const char *buf1, const char *buf2, size_t count);
@@ -135,13 +135,16 @@ int init_cache(pid_t pid) {
                 continue;
             }
             cache_add_region(head, tail-head);
-            INFO("Added region at %" PRIx64 " for %" PRId64, head, tail-head);
         }
     }
     fclose(maps);
 
     snprintf(tmp, sizeof(tmp), "/proc/%d/clear_refs", pid);
-    clear_refs_filename = strdup(tmp);
+    clear_refs = fopen(tmp, "w");
+    if (!clear_refs) {
+        ERR("Cannot open file '%s': %s", tmp, strerror(errno));
+        return FAILURE;
+    }
 
     return SUCCESS;
 }
@@ -165,21 +168,22 @@ void mark_dirty(uint64_t address) {
     /* I don't want to use bsearch() to avoid extra function calls */
     int left = 0;
     int right = reg_count;
-    for (index = reg_count / 2; ; index = (left + right + 1) / 2) {
+    for (index = right / 2; right > left; index = (left + right) / 2) {
         if (address < cache[index].start) {
-            if (index == right) {
-                WARN("Address %lx not found in cache", address);
-                return;
-            }
             right = index;
-        } else if (address > cache[index].end) {
-            left = index;
+        } else if (address >= cache[index].end) {
+            left = index + 1;
         } else {
             break;
         }
     }
+    if (left == right) {
+        DBG("Address %lx not found in cache", address);
+        return;
+    }
     int page_num = (address - cache[index].start) / PAGE_SIZE;
-    char mask = 0x80 >> (page_num % 8 - 1);
+    DBG("Marking page %d in region starting %" PRIx64, page_num, cache[index].start);
+    char mask = 0x80 >> (page_num % 8);
     cache[index].bitmap[page_num / 8] |= mask;
     cache[index].flags = FLAG_DIRTY;
 }
@@ -187,6 +191,7 @@ void mark_dirty(uint64_t address) {
 
 #define CHECK_PAGE(I) if (_8pages & (0x80 >> (I))) { \
     page_offset = PAGE_SIZE * (page_index + (I)); \
+    DBG("Dirty page %d in region starting %" PRIx64, page_index + (I), cache[i].start); \
     process_page(cache[i].start + page_offset, cache[i].pages + page_offset, step); \
 }
 /**************************************************************************
@@ -216,6 +221,7 @@ int process_dirty(uint64_t step) {
             unsigned int slots = res.quot + (res.rem ? 1 : 0);     // each slot is 1 byte representing 8 pages
             for (j = 0; j < slots; j += sizeof(uint64_t)) {
                 uint64_t _64pages = *(uint64_t *)(cache[i].bitmap + j);
+                DBG("0x%" PRIx64 " %d-%d: 0x%" PRIx64, cache[i].start, j, j + 64, _64pages);
                 if (_64pages) {                 // one of 64 checked pages dirty
                     for (k = 0; k < 8; k++) {
                         char _8pages = cache[i].bitmap[j+k];
@@ -234,7 +240,7 @@ int process_dirty(uint64_t step) {
                 }
             }
             cache[i].flags = 0;                 // clear region dirty flag
-            memset(cache[i].bitmap, 0, j / 8);  // clear page bitmap
+            memset(cache[i].bitmap, 0, slots);  // clear page bitmap
         }
     }
 
@@ -255,19 +261,13 @@ int process_dirty(uint64_t step) {
  *
  **************************************************************************/
 void reset_dirty(void) {
-    // TODO Can I keep the file opened to avoid opening/closing every time?
-    FILE *clear_refs = fopen(clear_refs_filename, "w");
-    if (!clear_refs) {
-        ERR("Cannot open file '%s': %s", clear_refs_filename, strerror(errno));
-        return;
-    }
-    char buf = '4';     // '4' resets soft-dirty bits
+    static char buf = '4';     // '4' resets soft-dirty bits
+
+    rewind(clear_refs);
     if (!fwrite(&buf, 1, 1, clear_refs)) {
-        ERR("Cannot write to file '%s'", clear_refs_filename);
-        fclose(clear_refs);
+        ERR("Cannot write to clear_refs file");
         return;
     }
-    fclose(clear_refs);
 }
 
 
@@ -287,29 +287,27 @@ void reset_dirty(void) {
  **************************************************************************/
 void process_page(uint64_t address, char *cached, uint64_t step_id) {
     /* buffer must be aligned to allow fast vector instructions */
-    alignas(MEM_SEGMENT_SIZE) char buffer[MEM_SEGMENT_SIZE];
-    struct iovec local = {buffer, MEM_SEGMENT_SIZE};
-    struct iovec child = {(void *)address, MEM_SEGMENT_SIZE};
+    alignas(MEM_SEGMENT_SIZE) char buffer[PAGE_SIZE];
+    struct iovec local = {buffer, PAGE_SIZE};
+    struct iovec child = {(void *)address, PAGE_SIZE};
+    if (process_vm_readv(child_pid, &local, 1, &child, 1, 0) < (ssize_t)MEM_SEGMENT_SIZE) {
+        ERR("Cannot read child memory: %s", strerror(errno));
+        return;
+    }
 
-    uint64_t page_end = address + PAGE_SIZE;
     /* loop through page segments, look for changed one */
-    for (uint64_t cur = address; cur < page_end; cur += MEM_SEGMENT_SIZE) {
-        if (process_vm_readv(child_pid, &local, 1, &child, 1, 0) < (ssize_t)MEM_SEGMENT_SIZE) {
-            ERR("Cannot read child memory: %s", strerror(errno));
-            return;
-        }
-        if (memdiff(buffer, cached, MEM_SEGMENT_SIZE)) {    // found changed segment
-            memcpy(cached, buffer, MEM_SEGMENT_SIZE);
+    for (uint64_t offset = 0; offset < PAGE_SIZE; offset += MEM_SEGMENT_SIZE) {
+        if (memdiff(buffer + offset, cached + offset, MEM_SEGMENT_SIZE)) {
+            // found changed segment
+            memcpy(cached + offset, buffer + offset, MEM_SEGMENT_SIZE);
 
             /* store memory change event in DB using workier */
             struct insert_mem_msg *msg = malloc(sizeof(*msg));
-            msg->address = cur;
+            msg->address = address + offset;
             msg->step_id = step_id;
             memcpy(msg->content, buffer, MEM_SEGMENT_SIZE);
             ch_write(insert_mem_ch, (char *)msg, sizeof(*msg));    // channel reader will free msg
         }
-        child.iov_base = (void *)cur;
-        cached += MEM_SEGMENT_SIZE;
     }
 }
 
@@ -346,7 +344,8 @@ void cache_add_region(uint64_t address, uint64_t size) {
         }
         if (index < (reg_count-1)) {
             /* copy regions following the new one */
-            memcpy(cache + sizeof(*cache) * (index + 1), tmp + sizeof(*cache) * index, sizeof(*cache) * (reg_count - index));
+            DBG("Copy to %d from %d %lu bytes", index + 1, index, sizeof(*cache) * (reg_count - index - 1));
+            memcpy(&cache[index + 1], &tmp[index], sizeof(*cache) * (reg_count - index - 1));
         }
         new_reg = cache + index;
         free(tmp);
@@ -371,4 +370,11 @@ void cache_add_region(uint64_t address, uint64_t size) {
     /* it is important to use aligned momory as CPU instructions used by memdiff operates with aligned memory */
     posix_memalign((void **)&new_reg->pages, MEM_SEGMENT_SIZE, size);
     memset(new_reg->pages, 0, size);
+    INFO("Added mem region at %" PRIx64 " for %" PRId64, address, size);
+}
+
+void cache_status(void) {
+    for (unsigned int i = 0; i < reg_count; i++) {
+        DBG("Reg %" PRIx64 " for %" PRId64, cache[i].start, cache[i].end - cache[i].start);
+    }
 }

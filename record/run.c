@@ -103,6 +103,9 @@ int record(char *fr_path, char *params[]) {
 
     int pid = fork();
     if (pid) {
+        printf("Initialising ... ");
+        fflush(stdout);
+        TIMER_START;
         /* parent */
         int wait_status;
         waitpid(pid, &wait_status, 0);      // wait for SIGTRAP from child, indicating the exec
@@ -157,7 +160,11 @@ int record(char *fr_path, char *params[]) {
         if (SUCCESS != bpf_start(pid, bpf_callback)) {
             return FAILURE;
         }
+        TIMER_STOP("Initialisation");        
+        printf("process %d is ready to be traced\n", pid);
+        printf("---------- 8< ----------\n");
 
+        TIMER_START;
         while (-1 != ptrace(PTRACE_CONT, pid, NULL, NULL)) {
             waitpid(pid, &wait_status, 0);      // wait for SIGTRAP from child, indicating the breakpoint
             if (WIFEXITED(wait_status)) {
@@ -168,6 +175,10 @@ int record(char *fr_path, char *params[]) {
 
             if (WIFSTOPPED(wait_status)) {
                 signum = WSTOPSIG(wait_status);
+                if (SIGTRAP != signum) {
+                    INFO("Child stopped - %s", strsignal(signum));
+                    break;
+                }
                 /* wait until BPF callback releases the mutex so it is safe to process memory */
                 int ret = pthread_mutex_lock(&cachedmem_access);
                 if (ret) {
@@ -182,19 +193,21 @@ int record(char *fr_path, char *params[]) {
                     ERR("Error unlocking mutex: %s", strerror(ret));
                     return FAILURE;
                 }
-                if (SIGTRAP != signum) {
-                    INFO("Child stopped - sig %d", signum);
-                    break;
-                }
             } else {
                 // TODO: can we get here?
                 ERR("Unsupported wait status %d", wait_status);
                 return FAILURE;
             }
-            usleep(1000);
         }
+        TIMER_STOP("Client tracing");
+        printf("---------- 8< ----------\n");
+        printf("Finishing ... ");
+        fflush(stdout);
+
+        TIMER_START;        
         bpf_stop();
 
+        DAB_CLOSE(0);
         INFO("Waiting for worker threads to finish");
 
         /* Send termination to workers and wait for workers to finish. Because workers
@@ -207,7 +220,6 @@ int record(char *fr_path, char *params[]) {
         unlink(fifo_name);
 
         /* TODO I don't know why but inserting of signal into DB fails with 'locked', so DB close/open helps */
-        DAB_CLOSE(0);
         if (signum) {
             extern char *db_name;
             if (DAB_OK != DAB_OPEN(db_name, DAB_FLAG_NONE)) {     // already in multi-threaded mode
@@ -217,6 +229,7 @@ int record(char *fr_path, char *params[]) {
                 ERR("Cannot store exit signal in DB");
             }
         }
+        TIMER_STOP("Finishing");
 
     } else {
         /* child */
@@ -232,6 +245,7 @@ int record(char *fr_path, char *params[]) {
         ERR("Cannot execute %s - %s", params[0], strerror(errno));
         exit(EXIT_FAILURE);
     }
+    printf("done\n");
 
     return SUCCESS;
 }
@@ -361,12 +375,11 @@ int process_breakpoint(pid_t pid) {
     static ULONG counter = 0;
     static ULONG func_id = 0, depth = 0, old_func_id = 0;
     int func_flag;
-    int scope_id;
 
     /* Get registers */
     struct user_regs_struct regs;
     if (-1 == ptrace(PTRACE_GETREGS, pid, NULL, &regs)) {
-        printf("Cannot read process registers - %s\n", strerror(errno));
+        ERR("Cannot read process registers - %s", strerror(errno));
         return FAILURE;
     }
 
@@ -379,7 +392,8 @@ int process_breakpoint(pid_t pid) {
         return FAILURE;
     }
 
-    if (DAB_OK != DAB_CURSOR_FETCH(select_line, &fid, &line, &saved, &func_id, &func_flag, &scope_id)) {
+    if (DAB_OK != DAB_CURSOR_FETCH(select_line, &fid, &line, &saved, &func_id, &func_flag)) {
+        WARN("Cannot find statement by address %" PRIx64, (uint64_t)pc - base_address);
         return FAILURE;
     }
 
@@ -395,7 +409,7 @@ int process_breakpoint(pid_t pid) {
 
     /* Store new step using worker */
     ULONG step_id = ++counter;
-    INFO("Step %" PRId64, step_id);
+    DBG("Step %" PRId64, step_id);
     struct insert_step_msg *msg = malloc(sizeof(*msg));
     msg->step_id = step_id;
     msg->file_id = fid;
@@ -517,12 +531,12 @@ void bpf_callback(void *unused, void *data, int data_size) {
        to use it when got EXIT */
     static uint64_t mapped_size = 0;
     static int locked = 0;
+    static uint64_t brk_boundary = 0;
 
     struct bpf_event *event = data;
     if (BPF_EVT_SIGNAL == event->type) {
-//        INFO("signal %" PRId64, event->payload);
-        if (locked && SIGTRAP == event->payload) {
-            INFO("unlocking");
+        if (locked) {
+            DBG("unlocking");
             int ret = pthread_mutex_unlock(&cachedmem_access);
             if (ret) {
                 ERR("Error unlocking mutex: %s", strerror(ret));
@@ -532,7 +546,7 @@ void bpf_callback(void *unused, void *data, int data_size) {
         }
         return;
     } else if (!locked) {
-        INFO("locking");
+        DBG("locking");
         int ret = pthread_mutex_lock(&cachedmem_access);
         if (ret) {
             ERR("Error locking mutex: %s", strerror(ret));
@@ -543,18 +557,29 @@ void bpf_callback(void *unused, void *data, int data_size) {
     
     switch (event->type) {
         case BPF_EVT_PAGEFAULT:
-//            INFO("Page fault at %" PRIx64, event->payload);
+            DBG("Page fault at %" PRIx64, event->payload);
             mark_dirty(event->payload);
             break;
         case BPF_EVT_MMAPENTRY:
+            DBG("Map entry");
             mapped_size = event->payload;
             break;
         case BPF_EVT_MMAPEXIT:
-            INFO("New map at %" PRIx64 " for %" PRId64, event->payload, mapped_size);
+            DBG("New map at %" PRIx64 " for %" PRId64, event->payload, mapped_size);
             cache_add_region(event->payload, mapped_size);
             break;
         case BPF_EVT_MUNMAP:
-            INFO("Unmap at %" PRIx64, event->payload);
+            DBG("Unmap at %" PRIx64, event->payload);
+            break;
+        case BPF_EVT_BRK:
+            if (!brk_boundary) {
+                brk_boundary = event->payload;
+            } else {
+                uint64_t allocated = event->payload - brk_boundary;
+                DBG("New malloc at %" PRIx64 " for %" PRId64, brk_boundary, allocated);
+                cache_add_region(brk_boundary, allocated);
+                brk_boundary = event->payload;
+            }
             break;
         default:
             WARN("Inknown event type %" PRId64 "\n", event->type);

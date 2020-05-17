@@ -131,9 +131,13 @@ int dbg_srcinfo(char *name) {
         RETCLEAN(FAILURE);
     }
 
-    while (SUCCESS == (ret = proc_unit(dbg)));
+    int count;
+    printf("Collecting debug info ... ");
+    fflush(stdout);
+    for (count = 0; SUCCESS == (ret = proc_unit(dbg)); count++);
     if (END == ret) {
         ret = SUCCESS;   // all units processed ok
+        printf("%d units processed ok\n", count);
     }
 
     if (SUCCESS != alter_db()) {
@@ -142,9 +146,6 @@ int dbg_srcinfo(char *name) {
     }
 
 cleanup:
-    if (fd > 0) {
-        close(fd);
-    }
     if (err) {
         dwarf_dealloc(dbg, err, DW_DLA_ERROR);
     }
@@ -152,6 +153,9 @@ cleanup:
         dwarf_finish(dbg, &err);
         dwarf_dealloc(dbg, err, DW_DLA_ERROR);
         /* dbg cannot be freed, according to libdwarf manual rev 1.63, Sep'06 */
+    }
+    if (fd > 0) {
+        close(fd);
     }
 
     return ret;
@@ -236,7 +240,7 @@ int proc_unit(Dwarf_Debug dbg) {
         }
     }
 
-    INFO("Processing unit %s", name);
+    DBG("Processing unit %s", name);
     if (DAB_OK != DAB_BEGIN) {
         RETCLEAN(FAILURE);
     } else {
