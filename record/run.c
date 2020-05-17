@@ -88,6 +88,7 @@ static void set_ip(pid_t, REG_TYPE ip);
 static int set_breakpoints(pid_t pid);
 static int process_breakpoint(pid_t pid);
 static struct cached_line *lookup_cache(uint64_t address);
+static int get_base_address(pid_t p, uint64_t *offset);
 
 static void bpf_callback(void *cookie, void *data, int data_size);
 
@@ -659,4 +660,64 @@ void bpf_callback(void *unused, void *data, int data_size) {
         default:
             WARN("Inknown event type %" PRId64 "\n", event->type);
     }
+}
+
+
+/**************************************************************************
+ *
+ *  Function:   get_base_address
+ *
+ *  Params:     pid - process PID
+ *              base - where to store base address
+ *
+ *  Return:     SUCCESS / FAILURE
+ *
+ *  Descr:      Find base address from program executable memory region
+ *              address
+ *
+ **************************************************************************/
+int get_base_address(pid_t p, uint64_t *base) {
+    char exe_name[256];
+    char tmp[256];
+
+    // read executable name from /proc/<pid>/exe
+    snprintf(tmp, sizeof(tmp), "/proc/%d/exe", p);
+    ssize_t res = readlink(tmp, exe_name, sizeof(exe_name) - 1);
+    if (res < 0) {
+        ERR("Cannot get executable name from '%s': %s", tmp, strerror(errno));
+        return FAILURE;
+    }
+    exe_name[res] = '\0';
+
+    snprintf(tmp, sizeof(tmp), "/proc/%d/maps", p);
+    FILE *maps = fopen(tmp, "r");
+    if (!maps) {
+        ERR("Cannot open file '%s': %s", tmp, strerror(errno));
+        return FAILURE;
+    }
+
+    while (fgets(tmp, sizeof(tmp), maps)) {
+        char *state, *field;
+        field = strtok_r(tmp, " \t", &state);
+        if (!field) {
+            continue;
+        }
+        field = strtok_r(NULL, " \t", &state);
+        if (!field || 'x' != field[2]) {     // skip memory without exec permissions
+            continue;
+        }
+        int i = 2;  // two fields processed already
+        while (i < 6 && NULL != (field = strtok_r(NULL, " \t\n", &state))) {
+            i++;
+        }
+        if (field && !strcmp(field, exe_name)) {
+            /* first field, already 0-terminated, has start and end address */
+            sscanf(tmp, "%" PRIx64, base);
+	    INFO("Base %" PRIx64, *base);
+            break;
+       }
+    }
+    fclose(maps);
+
+    return SUCCESS;
 }

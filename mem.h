@@ -46,11 +46,8 @@ struct heap_event {
     uint64_t    size;
 };
 
-int get_base_address(pid_t p, uint64_t *offset);
-
 /* function returns pointer to function with fastest implementation based on instruction set and buffer size */
 int (* best_memdiff(size_t count))(const char *, const char *, size_t);
-uint32_t (* best_memisset(size_t count))(const char *, size_t);
 
 #endif
 

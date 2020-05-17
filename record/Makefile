@@ -41,7 +41,7 @@ LDLIBS := -lsqlite3 -ldwarf -lelf $(LIBBPF)
 .PHONY : all clean depend install uninstall
 
 DEPEND = ../dab/dab.o ../stingray/stingray.o
-OBJFILES = record.o db.o run.o dbginfo.o memdiff.o mem.o channel.o workers.o \
+OBJFILES = record.o db.o run.o dbginfo.o memdiff.o channel.o workers.o \
 	memcache.o bpf.o
 
 all: fr_record fr_preload.so
