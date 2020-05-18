@@ -42,7 +42,7 @@ LDLIBS := -lsqlite3 -ldwarf -lelf $(LIBBPF)
 
 DEPEND = ../dab/dab.o ../stingray/stingray.o
 OBJFILES = record.o db.o run.o dbginfo.o memdiff.o channel.o workers.o \
-	memcache.o bpf.o
+	memcache.o bpf.o reset_dirty.o
 
 all: fr_record fr_preload.so
 

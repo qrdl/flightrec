@@ -57,6 +57,7 @@
 #include "channel.h"
 #include "workers.h"
 #include "bpf.h"
+#include "reset_dirty.h"
 
 #ifdef __x86_64__
 #define IP(A)   A.rip
@@ -68,6 +69,22 @@
 
 #define FUNC_FLAG_START     1
 #define FUNC_FLAG_END       2
+
+#define LOCK(A)     do { \
+                        int ret = pthread_mutex_lock(&A); \
+                        if (ret) { \
+                            ERR("Error locking mutex: %s", strerror(ret)); \
+                            return FAILURE; \
+                        } \
+                    } while(0)
+#define UNLOCK(A)     do { \
+                        int ret = pthread_mutex_unlock(&A); \
+                        if (ret) { \
+                            ERR("Error locking mutex: %s", strerror(ret)); \
+                            return FAILURE; \
+                        } \
+                    } while(0)
+
 
 /* SQLite performance isn't good enough so I use my own cache. Steps within unit are sorted by address so I can
    approximate the location of needed entry faster than logN */
@@ -172,6 +189,9 @@ int record(char *fr_path, char *params[]) {
         if (SUCCESS != process_breakpoint(pid)) {
             return FAILURE;
         }
+        if (SUCCESS != start_reset_dirty(pid)) {
+            return FAILURE;
+        }
 
         /* load BPF programs to monitor page faults, signals and mmap/munmap/brk syscalls */
         if (SUCCESS != bpf_start(pid, bpf_callback)) {
@@ -197,19 +217,11 @@ int record(char *fr_path, char *params[]) {
                     break;
                 }
                 /* wait until BPF callback releases the mutex so it is safe to process memory */
-                int ret = pthread_mutex_lock(&cachedmem_access);
-                if (ret) {
-                    ERR("Error locking mutex: %s", strerror(ret));
-                    return FAILURE;
-                }
+                LOCK(cachedmem_access);
                 if (SUCCESS != process_breakpoint(pid)) {
                     return FAILURE;
                 }
-                ret = pthread_mutex_unlock(&cachedmem_access);
-                if (ret) {
-                    ERR("Error unlocking mutex: %s", strerror(ret));
-                    return FAILURE;
-                }
+                UNLOCK(cachedmem_access);
             } else {
                 // TODO: can we get here?
                 ERR("Unsupported wait status %d", wait_status);
@@ -464,6 +476,11 @@ int process_breakpoint(pid_t pid) {
     static ULONG depth = 0, func_id = 0;
     REG_TYPE int3 = 0xCC;    // INT 3
 
+    if (mem_dirty) {
+        /* trigger reset_dirty thread to reset clear_refs */
+        trigger_reset_dirty();
+    }
+
     /* Get registers */
     struct user_regs_struct regs;
     if (-1 == ptrace(PTRACE_GETREGS, pid, NULL, &regs)) {
@@ -553,8 +570,12 @@ int process_breakpoint(pid_t pid) {
         ERR("Cannot update child code - %s", strerror(errno));
         return FAILURE;
     }
+
     if (mem_dirty) {
-        reset_dirty();
+        /* wait for reset_dirty thread to finish. It is ok to unlock mutex immediately because thread
+           will wait in conditional var, the mutex here only an indicator that thread completed its run */
+        wait_reset_dirty();
+        mem_dirty = 0;
     }
 
     return SUCCESS;

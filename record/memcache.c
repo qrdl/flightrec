@@ -37,6 +37,7 @@
 #include <sys/user.h>
 #include <sys/uio.h>
 #include <linux/limits.h>
+#include <pthread.h>
 
 #include "flightrec.h"
 #include "eel.h"
@@ -65,7 +66,6 @@ static struct region *cache;
 static unsigned int reg_count;
 
 static pid_t child_pid;
-static FILE *clear_refs;
 
 char mem_dirty;
 
@@ -138,13 +138,6 @@ int init_cache(pid_t pid) {
         }
     }
     fclose(maps);
-
-    snprintf(tmp, sizeof(tmp), "/proc/%d/clear_refs", pid);
-    clear_refs = fopen(tmp, "w");
-    if (!clear_refs) {
-        ERR("Cannot open file '%s': %s", tmp, strerror(errno));
-        return FAILURE;
-    }
 
     return SUCCESS;
 }
@@ -246,30 +239,6 @@ int process_dirty(uint64_t step) {
     }
 
     return SUCCESS;
-}
-
-
-/**************************************************************************
- *
- *  Function:   reset_dirty
- *
- *  Params:     N/A
- *
- *  Return:     N/A
- *
- *  Descr:      Reset system dirty flag for all memory pages to force page
- *              faults on any change
- *
- **************************************************************************/
-void reset_dirty(void) {
-    static char buf = '4';     // '4' resets soft-dirty bits
-
-    rewind(clear_refs);
-    if (!fwrite(&buf, 1, 1, clear_refs)) {
-        ERR("Cannot write to clear_refs file");
-        return;
-    }
-    mem_dirty = 0;
 }
 
 

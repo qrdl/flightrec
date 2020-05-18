@@ -1,10 +1,10 @@
 /**************************************************************************
  *
- *  File:       memcache.h
+ *  File:       reset_dirty.h
  *
  *  Project:    Flight recorder (https://github.com/qrdl/flightrec)
  *
- *  Descr:      Cached memory ops
+ *  Descr:      Control of special thread which resets memory page status
  *
  *  Notes:
  *
@@ -26,17 +26,13 @@
  *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *
  **************************************************************************/
-#ifndef _MEMCACHE_H
-#define _MEMCACHE_H
+#ifndef _RESET_DIRTY_H
+#define _RESET_DIRTY_H
 
-#include <inttypes.h>
 #include <sys/types.h>
 
-int init_cache(pid_t pid);
-void cache_add_region(uint64_t start, uint64_t size);
-void mark_dirty(uint64_t address);
-int process_dirty(uint64_t step);
-
-extern char mem_dirty;
+int start_reset_dirty(pid_t pid);
+void trigger_reset_dirty(void);
+void wait_reset_dirty(void);
 
 #endif
