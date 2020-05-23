@@ -40,6 +40,7 @@
 #include <sys/user.h>
 #include <inttypes.h>
 #include <pthread.h>
+#include <semaphore.h>
 // for P_tmpdir
 #ifndef __USE_XOPEN
 #define __USE_XOPEN 1
@@ -55,8 +56,8 @@
 #include "mem.h"
 #include "memcache.h"
 #include "channel.h"
-#include "workers.h"
 #include "bpf.h"
+#include "db_workers.h"
 #include "reset_dirty.h"
 
 #ifdef __x86_64__
@@ -70,29 +71,13 @@
 #define FUNC_FLAG_START     1
 #define FUNC_FLAG_END       2
 
-#define LOCK(A)     do { \
-                        int ret = pthread_mutex_lock(&A); \
-                        if (ret) { \
-                            ERR("Error locking mutex: %s", strerror(ret)); \
-                            return FAILURE; \
-                        } \
-                    } while(0)
-#define UNLOCK(A)     do { \
-                        int ret = pthread_mutex_unlock(&A); \
-                        if (ret) { \
-                            ERR("Error locking mutex: %s", strerror(ret)); \
-                            return FAILURE; \
-                        } \
-                    } while(0)
-
-
 /* SQLite performance isn't good enough so I use my own cache. Steps within unit are sorted by address so I can
    approximate the location of needed entry faster than logN */
 struct cached_line {
     uint64_t    address;
     uint64_t    func_id;
     char        func_flag;
-    REG_TYPE    org_instr;
+    uint8_t     org_instr_byte;
 };
 struct cached_unit {
     uint64_t            start;      // address of first line in unit
@@ -110,15 +95,19 @@ static int get_base_address(pid_t p, uint64_t *offset);
 static void bpf_callback(void *cookie, void *data, int data_size);
 
 static int fifo_fd = 0;                 // FIFO for receiving alloc/free events from fr_preload.so
-static struct channel *insert_step_ch;  // Channel for communicationg with step insertion worker
-static struct channel *insert_heap_ch;  // Channel for communicationg with heap event insertion worker
-struct channel *insert_mem_ch;          // Channel for communicationg with mem insertion worker, not-static because is used in memcache.c
+static struct channel *insert_step_ch;  // Channel for communicating with step insertion worker
+static struct channel *insert_heap_ch;  // Channel for communicating with heap event insertion worker
+struct channel *insert_mem_ch;          // Channel for communicating with mem insertion worker, not-static because is used in memcache.c
+struct channel *proc_mem_ch;            // Channel for communicating with mem workers, non-static because used in mem_workers.c
 /* child program base address. Addresses from debug info may or may not contain base address, so if accessing child
    memory fails, assume addresses need to be adjusted by base address */
 static uint64_t base_address = 0;
 /* this mutex is used to sync access to cached memory between main loop and bpf_callback() */
-static pthread_mutex_t cachedmem_access = PTHREAD_MUTEX_INITIALIZER;
 static struct cached_unit *instr_cache;
+static volatile char mem_dirty;
+static uint64_t step_id = 0;
+
+static sem_t bpf_sem;
 
 /**************************************************************************
  *
@@ -134,7 +123,6 @@ static struct cached_unit *instr_cache;
  *
  **************************************************************************/
 int record(char *fr_path, char *params[]) {
-
     int pid = fork();
     if (pid) {
         printf("Initialising ... ");
@@ -165,10 +153,14 @@ int record(char *fr_path, char *params[]) {
         }
         INFO("Tracing %s", params[0]);
 
-        /* Init worker's channels and start workers for writing to DB */
-        START_WORKER(step);
-        START_WORKER(heap);
-        START_WORKER(mem);
+        /* Start worker threads  */
+        if (SUCCESS != start_reset_dirty(pid)) {
+            return FAILURE;
+        }
+        mem_dirty = 1;
+        START_DB_WORKER(step);
+        START_DB_WORKER(heap);
+        START_DB_WORKER(mem);
 
         /* continue to first executable line */
         if (-1 == ptrace(PTRACE_CONT, pid, NULL, NULL)) {
@@ -189,11 +181,17 @@ int record(char *fr_path, char *params[]) {
         if (SUCCESS != process_breakpoint(pid)) {
             return FAILURE;
         }
-        if (SUCCESS != start_reset_dirty(pid)) {
+
+        /* init channel and load BPF programs to monitor page faults, signals and mmap/munmap/brk syscalls
+           Do it after first stop as we need semaphore to be posted starting from step 2 */
+        proc_mem_ch = ch_create();
+        if (!proc_mem_ch) {
             return FAILURE;
         }
-
-        /* load BPF programs to monitor page faults, signals and mmap/munmap/brk syscalls */
+        if (sem_init(&bpf_sem, 0, 0)) {
+            ERR("Cannot init the semaphoe for BPF thread sync: %s", strerror(errno));
+            return FAILURE;
+        }
         if (SUCCESS != bpf_start(pid, bpf_callback)) {
             return FAILURE;
         }
@@ -216,12 +214,14 @@ int record(char *fr_path, char *params[]) {
                     INFO("Child stopped - %s", strsignal(signum));
                     break;
                 }
-                /* wait until BPF callback releases the mutex so it is safe to process memory */
-                LOCK(cachedmem_access);
+                /* wait until BPF callback finishes processing */
+                if (sem_wait(&bpf_sem)) {
+                    ERR("Error waiting for condition: %s", strerror(errno));
+                    return FAILURE;
+                }
                 if (SUCCESS != process_breakpoint(pid)) {
                     return FAILURE;
                 }
-                UNLOCK(cachedmem_access);
             } else {
                 // TODO: can we get here?
                 ERR("Unsupported wait status %d", wait_status);
@@ -241,9 +241,9 @@ int record(char *fr_path, char *params[]) {
 
         /* Send termination to workers and wait for workers to finish. Because workers
            flush data to DB, process them one by one, concurrency can corrupt DB */
-        WAIT_WORKER(step);
-        WAIT_WORKER(heap);
-        WAIT_WORKER(mem);
+        WAIT_DB_WORKER(step);
+        WAIT_DB_WORKER(heap);
+        WAIT_DB_WORKER(mem);
 
         close(fifo_fd);
         unlink(fifo_name);
@@ -254,12 +254,13 @@ int record(char *fr_path, char *params[]) {
             if (DAB_OK != DAB_OPEN(db_name, DAB_FLAG_NONE)) {     // already in multi-threaded mode
                 return FAILURE;
             }
-            if (DAB_OK != DAB_EXEC("INSERT INTO misc (key, value) VALUES ('exit_signal', 11)")) {
+            if (DAB_OK != DAB_EXEC("INSERT INTO misc (key, value) VALUES ('exit_signal', ?)", signum)) {
                 ERR("Cannot store exit signal in DB");
             }
         }
         TIMER_STOP("Finishing");
-
+        DAB_CLOSE(0);
+        /* TODO: change DB ownership, remove temp DBs */
     } else {
         /* child */
         if (-1 == ptrace(PTRACE_TRACEME, 0, NULL, NULL)) {
@@ -366,18 +367,25 @@ int set_breakpoints(pid_t pid) {
                         ERR("Cannot update unit base address");
                         RETCLEAN(FAILURE);
                     }
-                    continue;   // repeat the attempt with non-zero base_address
+                    // repeat the attempt with non-zero base_address
+                    errno = 0;  // PTRACE_PEEKDATA can return anything, even -1, so use only errno for diag
+                    instr = ptrace(PTRACE_PEEKDATA, pid, (void *)(cur_line->address + base_address), NULL);
+                    if (errno) {
+                        ERR("Cannot peek at child code - %s", strerror(errno));
+                        RETCLEAN(FAILURE);
+                    }
                 }
                 ERR("Cannot peek at child code - %s", strerror(errno));
                 RETCLEAN(FAILURE);
             }
-            cur_line->org_instr = instr;
+            cur_line->org_instr_byte = instr & 0xFF;
             /* update child code */
             instr = (instr & ~0xFF) | int3;
             if (-1 == ptrace(PTRACE_POKEDATA, pid, (void *)(cur_line->address + base_address), (void *)instr)) {
                 ERR("Cannot update child code - %s", strerror(errno));
                 RETCLEAN(FAILURE);
             }
+            DBG("Set breakpoint at 0x%" PRIx64, cur_line->address);
         }
         if (DAB_NO_DATA != db_stat) {
             RETCLEAN(FAILURE);
@@ -472,14 +480,19 @@ struct cached_line *lookup_cache(uint64_t address) {
  *
  **************************************************************************/
 int process_breakpoint(pid_t pid) {
-    static ULONG counter = 0;
     static ULONG depth = 0, func_id = 0;
     REG_TYPE int3 = 0xCC;    // INT 3
+    int wait_reset;
 
     if (mem_dirty) {
-        /* trigger reset_dirty thread to reset clear_refs */
+        /* trigger reset_dirty thread to reset clear_refs. This is the slowest process so trigger it
+           as early as possible*/
         trigger_reset_dirty();
+        wait_reset = 1;
+    } else {
+        wait_reset = 0;
     }
+    step_id++;
 
     /* Get registers */
     struct user_regs_struct regs;
@@ -505,10 +518,13 @@ int process_breakpoint(pid_t pid) {
         // TODO handle long jump
         func_id = line->func_id;
     }
+    if (mem_dirty && FUNC_FLAG_START != line->func_flag) {
+        proc_dirty_mem(step_id);
+        mem_dirty = 0;      //it is important to reset it here because next instruction can cause PF and set it back to 1
+    }
 
     /* Store new step using worker */
-    ULONG step_id = ++counter;
-    DBG("Step %" PRId64, step_id);
+    DBG("Step %" PRId64 " at 0x%" PRIx64, step_id, (uint64_t)pc);
     struct insert_step_msg *msg = malloc(sizeof(*msg));
     msg->step_id = step_id;
     msg->depth = depth;
@@ -517,7 +533,8 @@ int process_breakpoint(pid_t pid) {
     msg->regs = regs;   // regs is struct, not a pointer, so it will be copied
     ch_write(insert_step_ch, (char *)msg, sizeof(*msg));    // channel reader will free msg
 
-    /* check for heap events happened in tracee */
+    /* check for heap events happened in tracee. It doesn't make sense to place it in a separate thread 
+       as potential gain (measured as 1.8%) will be killed by thread sync overhead */
     int read_status;
     struct heap_event event;
     // read() won't block if there is nothing to read
@@ -538,17 +555,18 @@ int process_breakpoint(pid_t pid) {
         return FAILURE;
     }
 
-    if (FUNC_FLAG_START != line->func_flag || 1 == step_id) {
-        if (mem_dirty && SUCCESS != process_dirty(step_id)) {
-            return FAILURE;
-        }
-        if (FUNC_FLAG_END == line->func_flag) {
-            depth--;
-        }
+    if (FUNC_FLAG_END == line->func_flag) {
+        depth--;
     }
 
     /* restore original instruction, step over it */
-    if (-1 == ptrace(PTRACE_POKEDATA, pid, (void *)pc, (void *)line->org_instr)) {
+    REG_TYPE instr = ptrace(PTRACE_PEEKDATA, pid, (void *)pc, NULL);
+    if (errno) {
+        ERR("Cannot peek at child code - %s", strerror(errno));
+        return FAILURE;
+    }
+
+    if (-1 == ptrace(PTRACE_POKEDATA, pid, (void *)pc, (void *)(void *)((instr & ~0xFF) | line->org_instr_byte))) {
         ERR("Cannot update child code - %s", strerror(errno));
         return FAILURE;
     }
@@ -566,16 +584,14 @@ int process_breakpoint(pid_t pid) {
     }
 
     /* re-instate TRAP */
-    if (-1 == ptrace(PTRACE_POKEDATA, pid, (void *)pc, (void *)((line->org_instr & ~0xFF) | int3))) {
+    if (-1 == ptrace(PTRACE_POKEDATA, pid, (void *)pc, (void *)((instr & ~0xFF) | int3))) {
         ERR("Cannot update child code - %s", strerror(errno));
         return FAILURE;
     }
 
-    if (mem_dirty) {
-        /* wait for reset_dirty thread to finish. It is ok to unlock mutex immediately because thread
-           will wait in conditional var, the mutex here only an indicator that thread completed its run */
+    if (wait_reset) {
+        /* wait for memory wotker threads to finish */
         wait_reset_dirty();
-        mem_dirty = 0;
     }
 
     return SUCCESS;
@@ -627,59 +643,64 @@ void bpf_callback(void *unused, void *data, int data_size) {
     /* I assume that MMAPENTRY is always followed by MMAPEXIT, so saving size from ENTRY
        to use it when got EXIT */
     static uint64_t mapped_size = 0;
-    static int locked = 0;
+    static int count = 0;
     static uint64_t brk_boundary = 0;
 
     struct bpf_event *event = data;
     if (BPF_EVT_SIGNAL == event->type) {
-        if (locked) {
-            DBG("unlocking");
-            int ret = pthread_mutex_unlock(&cachedmem_access);
-            if (ret) {
-                ERR("Error unlocking mutex: %s", strerror(ret));
-                return;
+        DBG("signal %ld", event->payload);
+        if (SIGTRAP == event->payload) {
+            /* two SIGTRAP signals generated for each stop, so post semaphore only on first one, second on is for
+               one instruction step within process_breakpoint() */
+            if (count) {
+                count = 0;
+            } else {
+                if (sem_post(&bpf_sem)) {
+                    ERR("Cannot post semaphore: %s", strerror(errno));
+                    return;
+                }
+                count = 1;
             }
-            locked = 0;
         }
         return;
-    } else if (!locked) {
-        DBG("locking");
-        int ret = pthread_mutex_lock(&cachedmem_access);
-        if (ret) {
-            ERR("Error locking mutex: %s", strerror(ret));
-            return;
-        }
-        locked = 1;
     }
     
     switch (event->type) {
         case BPF_EVT_PAGEFAULT:
-            DBG("Page fault at %" PRIx64, event->payload);
-            mark_dirty(event->payload);
+            DBG("Page fault at 0x%" PRIx64, event->payload);
+            uint64_t *address = malloc(sizeof(*address));
+            *address = event->payload;
+            /* TODO: Compare what is faster - filter unknown address before sending or let workers deal with it */
+            ch_write(proc_mem_ch, (char *)address, sizeof(address));
+            mem_dirty = 1;
             break;
         case BPF_EVT_MMAPENTRY:
             DBG("Map entry");
             mapped_size = event->payload;
             break;
         case BPF_EVT_MMAPEXIT:
-            DBG("New map at %" PRIx64 " for %" PRId64, event->payload, mapped_size);
-            cache_add_region(event->payload, mapped_size);
+            DBG("New map at 0x%" PRIx64 " for %" PRId64, event->payload, mapped_size);
+            cache_add_region(event->payload, mapped_size, step_id);
             break;
         case BPF_EVT_MUNMAP:
-            DBG("Unmap at %" PRIx64, event->payload);
+            /* TODO: Remove memory region */
+            DBG("Unmap at 0x%" PRIx64, event->payload);
             break;
         case BPF_EVT_BRK:
             if (!brk_boundary) {
                 brk_boundary = event->payload;
-            } else {
+            } else if (event->payload > brk_boundary) {
                 uint64_t allocated = event->payload - brk_boundary;
-                DBG("New malloc at %" PRIx64 " for %" PRId64, brk_boundary, allocated);
-                cache_add_region(brk_boundary, allocated);
+                DBG("New malloc at 0x%" PRIx64 " for %" PRId64, brk_boundary, allocated);
+                cache_add_region(brk_boundary, allocated, step_id);
                 brk_boundary = event->payload;
+            } else {
+                /* TODO: Should it be processed? Can it really happen? */
+                INFO("Free");
             }
             break;
         default:
-            WARN("Inknown event type %" PRId64 "\n", event->type);
+            WARN("Unknown event type %" PRId64 "\n", event->type);
     }
 }
 

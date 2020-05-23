@@ -41,7 +41,7 @@ LDLIBS := -lsqlite3 -ldwarf -lelf $(LIBBPF)
 .PHONY : all clean depend install uninstall
 
 DEPEND = ../dab/dab.o ../stingray/stingray.o
-OBJFILES = record.o db.o run.o dbginfo.o memdiff.o channel.o workers.o \
+OBJFILES = record.o db.o run.o dbginfo.o memdiff.o channel.o db_workers.o \
 	memcache.o bpf.o reset_dirty.o
 
 all: fr_record fr_preload.so
@@ -85,16 +85,15 @@ db.o: ../stingray/stingray.h ../generics.h ../stingray/sr_internal.h
 db.o: ../dab/dab.h ../eel.h ../flightrec.h record.h
 run.o: ../stingray/stingray.h ../generics.h ../stingray/sr_internal.h
 run.o: ../eel.h ../dab/dab.h ../flightrec.h record.h ../mem.h memcache.h
-run.o: channel.h workers.h bpf.h
+run.o: channel.h bpf.h db_workers.h reset_dirty.h
 dbginfo.o: ../stingray/stingray.h ../generics.h ../stingray/sr_internal.h
 dbginfo.o: ../dab/dab.h ../eel.h ../flightrec.h record.h
-mem.o: ../eel.h ../stingray/stingray.h ../generics.h
-mem.o: ../stingray/sr_internal.h ../dab/dab.h ../flightrec.h record.h
-mem.o: ../mem.h channel.h workers.h
 channel.o: ../eel.h channel.h
-workers.o: ../stingray/stingray.h ../generics.h ../stingray/sr_internal.h
-workers.o: ../dab/dab.h ../flightrec.h channel.h workers.h ../mem.h ../eel.h
-memcache.o: ../flightrec.h ../eel.h ../mem.h memcache.h workers.h
-memcache.o: ../stingray/stingray.h ../generics.h ../stingray/sr_internal.h
-memcache.o: channel.h
+db_workers.o: ../stingray/stingray.h ../generics.h ../stingray/sr_internal.h
+db_workers.o: ../dab/dab.h ../flightrec.h channel.h db_workers.h ../mem.h
+db_workers.o: ../eel.h
+memcache.o: ../flightrec.h record.h ../stingray/stingray.h ../generics.h
+memcache.o: ../stingray/sr_internal.h ../eel.h ../mem.h memcache.h
+memcache.o: db_workers.h channel.h
 bpf.o: ../flightrec.h ../eel.h bpf.h
+reset_dirty.o: ../flightrec.h ../eel.h reset_dirty.h

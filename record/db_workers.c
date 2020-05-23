@@ -1,6 +1,6 @@
 /**************************************************************************
  *
- *  File:       workers.c
+ *  File:       db_workers.c
  *
  *  Project:    Flight recorder (https://github.com/qrdl/flightrec)
  *
@@ -8,10 +8,10 @@
  *
  *  Notes:      SQLite WAL mode results in locking when trying to run several
  *              transactions from different threads in parallel, even on
- *              different tables, therefore I have to use temporary in-memory
+ *              different tables, therefore I have to use temporary
  *              DB. However when support for WAL2 journalling mode and BEGIN
  *              CONCURRENT is finally merged into SQLite trunk it may give
- *              better result then using temporary in-memory DB
+ *              better result then using temporary DB
  *
  **************************************************************************
  *
@@ -36,7 +36,7 @@
 
 #include "flightrec.h"
 #include "channel.h"
-#include "workers.h"
+#include "db_workers.h"
 #include "eel.h"
 
 /* According to my measurments 4096 gives better performance than 2048 and 8192 */
@@ -61,15 +61,19 @@ void *wrk_insert_step(void *arg) {
     void *insert;
     size_t counter = 0;
 
-    if (DAB_OK != DAB_OPEN(":memory:", DAB_FLAG_NONE)) {
+    if (DAB_OK != DAB_OPEN("steps.fr", DAB_FLAG_CREATE)) {
+        return NULL;
+    }
+    if (DAB_UNEXPECTED != DAB_EXEC("PRAGMA journal_mode=OFF")) {    // PRAGMA returns data we are not interested in
+        return NULL;
+    }
+    if (DAB_OK != DAB_EXEC("PRAGMA synchronous=OFF")) {    // PRAGMA returns data we are not interested in
         return NULL;
     }
 
     if (DAB_OK != DAB_EXEC("CREATE TABLE step ("
                                 "id             INTEGER PRIMARY KEY AUTOINCREMENT, "
                                 "address        INTEGER NOT NULL, "
-                                "file_id        INTEGER, "      // ref file.id
-                                "line           INTEGER, "
                                 "depth          INTEGER, "
                                 "function_id    INTEGER, "     // ref function.id
                                 "regs           BLOB"
@@ -91,7 +95,7 @@ void *wrk_insert_step(void *arg) {
         return NULL;
     }
     struct sr registers;
-    while (CHANNEL_OK == ch_read(ch, (char **)&msg, &size)) {
+    while (CHANNEL_OK == ch_read(ch, (char **)&msg, &size, READ_BLOCK)) {
         DAB_CURSOR_RESET(insert);
         /* manualy assemble Stingray string to be used as BLOB */
         registers.val = (char *)&msg->regs;
@@ -138,8 +142,6 @@ void *wrk_insert_step(void *arg) {
         return NULL;
     }
 
-    // TODO resolve file and line by address
-
     DAB_CLOSE(DAB_FLAG_NONE);
 
     return (void*)1;    // non-NULL means success
@@ -162,7 +164,13 @@ void *wrk_insert_heap(void *arg) {
     void *insert, *update;
     size_t counter = 0;
 
-    if (DAB_OK != DAB_OPEN(":memory:", DAB_FLAG_NONE)) {
+    if (DAB_OK != DAB_OPEN("heap.fr", DAB_FLAG_CREATE)) {
+        return NULL;
+    }
+    if (DAB_UNEXPECTED != DAB_EXEC("PRAGMA journal_mode=OFF")) {    // PRAGMA returns data we are not interested in
+        return NULL;
+    }
+    if (DAB_OK != DAB_EXEC("PRAGMA synchronous=OFF")) {    // PRAGMA returns data we are not interested in
         return NULL;
     }
 
@@ -196,7 +204,7 @@ void *wrk_insert_heap(void *arg) {
     if (DAB_OK != DAB_BEGIN) {
         return NULL;
     }
-    while (CHANNEL_OK == ch_read(ch, (char **)&msg, &size)) {
+    while (CHANNEL_OK == ch_read(ch, (char **)&msg, &size, READ_BLOCK)) {
         if (msg->size) {
             DAB_CURSOR_RESET(insert);
             if (DAB_OK != DAB_CURSOR_BIND(insert,
@@ -276,7 +284,13 @@ void *wrk_insert_mem(void *arg) {
     void *insert;
     size_t counter = 0;
 
-    if (DAB_OK != DAB_OPEN(":memory:", DAB_FLAG_NONE)) {     // already in multi-threaded mode
+    if (DAB_OK != DAB_OPEN("mem.fr", DAB_FLAG_CREATE)) {     // already in multi-threaded mode
+        return NULL;
+    }
+    if (DAB_UNEXPECTED != DAB_EXEC("PRAGMA journal_mode=OFF")) {    // PRAGMA returns data we are not interested in
+        return NULL;
+    }
+    if (DAB_OK != DAB_EXEC("PRAGMA synchronous=OFF")) {    // PRAGMA returns data we are not interested in
         return NULL;
     }
 
@@ -301,7 +315,7 @@ void *wrk_insert_mem(void *arg) {
         return NULL;
     }
     struct sr content;
-    while (CHANNEL_OK == ch_read(ch, (char **)&msg, &size)) {
+    while (CHANNEL_OK == ch_read(ch, (char **)&msg, &size, READ_BLOCK)) {
         DAB_CURSOR_RESET(insert);
         /* manualy assemble Stingray string to be used as BLOB */
         content.val = msg->content;

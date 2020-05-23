@@ -40,34 +40,30 @@
 #include <pthread.h>
 
 #include "flightrec.h"
+#include "record.h"
 #include "eel.h"
 #include "mem.h"
 #include "memcache.h"
-#include "workers.h"
+#include "db_workers.h"
 #include "channel.h"
-
-#define FLAG_DIRTY  1
 
 /* memory region, initially corresponds to single entry in /proc/<pid>/maps, but later if region grows,
    added chunk is processed as separate region */
 struct region {
     uint64_t        start;
     uint64_t        end;
-    uint64_t        page_count;
-    uint64_t        flags;
-    char            *bitmap;        // bitmap size depends on page_count, one bit per page
     char            *pages;
 };
 
-static void process_page(uint64_t address, char *cached, uint64_t step);
+static uint64_t find_page(uint64_t address, char **cached);
+static void process_page(uint64_t address, char *cached, uint64_t step_id);
 
 /* sorted array of memory regions */
 static struct region *cache;
 static unsigned int reg_count;
 
 static pid_t child_pid;
-
-char mem_dirty;
+extern struct channel *proc_mem_ch;
 
 /* function pointers for best memory comparison functions, based on available CPU features and size */
 int (* memdiff)(const char *buf1, const char *buf2, size_t count);
@@ -134,7 +130,7 @@ int init_cache(pid_t pid) {
                 WARN("Cannot read memory regions");
                 continue;
             }
-            cache_add_region(head, tail-head);
+            cache_add_region(head, tail-head, 1);       // add new memory for first step
         }
     }
     fclose(maps);
@@ -145,17 +141,17 @@ int init_cache(pid_t pid) {
 
 /**************************************************************************
  *
- *  Function:   mark_dirty
+ *  Function:   find_page
  *
- *  Params:     address
+ *  Params:     address - memory address
+ *              cached - where to store pointer to cached memory page
  *
- *  Return:     N/A
+ *  Return:     start address of memory page
  *
- *  Descr:      Find address in cache, mark containing page and region as
- *              dirty
+ *  Descr:      Find page by address
  *
  **************************************************************************/
-void mark_dirty(uint64_t address) {
+uint64_t find_page(uint64_t address, char **cached) {
     int index;
     /* use binary search to find region the address belongs to */
     /* I don't want to use bsearch() to avoid extra function calls */
@@ -171,74 +167,12 @@ void mark_dirty(uint64_t address) {
         }
     }
     if (left == right) {
-        DBG("Address %lx not found in cache", address);
-        return;
+        DBG("Address 0x%" PRIx64 " not found in cache", address);
+        return 0;
     }
     int page_num = (address - cache[index].start) / PAGE_SIZE;
-    DBG("Marking page %d in region starting %" PRIx64, page_num, cache[index].start);
-    char mask = 0x80 >> (page_num % 8);
-    cache[index].bitmap[page_num / 8] |= mask;
-    cache[index].flags = FLAG_DIRTY;
-    mem_dirty = FLAG_DIRTY;
-}
-
-
-#define CHECK_PAGE(I) if (_8pages & (0x80 >> (I))) { \
-    page_offset = PAGE_SIZE * (page_index + (I)); \
-    DBG("Dirty page %d in region starting %" PRIx64, page_index + (I), cache[i].start); \
-    process_page(cache[i].start + page_offset, cache[i].pages + page_offset, step); \
-}
-/**************************************************************************
- *
- *  Function:   process_dirty
- *
- *  Params:     step - step ID to associate memory changes to
- *
- *  Return:     SUCCESS / FAILURE
- *
- *  Descr:      Loop through all regions, for dirty regions identify dirty
- *              pages, compare pages with cached ones, store difference in
- *              DB using worker thread, update cache.
- *              After processing reset dirty flag.
- *              There is a potential for speed-up by processing regions
- *              in worker threads, because every region is well-isolated
- *
- **************************************************************************/
-int process_dirty(uint64_t step) {
-    unsigned int i, j, k;
-    unsigned int page_index;
-    uint64_t page_offset;
-
-    for (i = 0; i < reg_count; i++) {
-        if (cache[i].flags & FLAG_DIRTY) {      // some pages in the region are dirty
-            div_t res = div(cache[i].page_count, 8);
-            unsigned int slots = res.quot + (res.rem ? 1 : 0);     // each slot is 1 byte representing 8 pages
-            for (j = 0; j < slots; j += sizeof(uint64_t)) {
-                uint64_t _64pages = *(uint64_t *)(cache[i].bitmap + j);
-                DBG("0x%" PRIx64 " %d-%d: 0x%" PRIx64, cache[i].start, j, j + 64, _64pages);
-                if (_64pages) {                 // one of 64 checked pages dirty
-                    for (k = 0; k < 8; k++) {
-                        char _8pages = cache[i].bitmap[j+k];
-                        if (_8pages) {          // one of 8 pages dirty
-                            page_index = (j+k) * 8;     // page number from bit position
-                            CHECK_PAGE(0);
-                            CHECK_PAGE(1);
-                            CHECK_PAGE(2);
-                            CHECK_PAGE(3);
-                            CHECK_PAGE(4);
-                            CHECK_PAGE(5);
-                            CHECK_PAGE(6);
-                            CHECK_PAGE(7);
-                        }
-                    }
-                }
-            }
-            cache[i].flags = 0;                 // clear region dirty flag
-            memset(cache[i].bitmap, 0, slots);  // clear page bitmap
-        }
-    }
-
-    return SUCCESS;
+    *cached  = cache[index].pages + page_num * PAGE_SIZE;
+    return cache[index].start + page_num * PAGE_SIZE;
 }
 
 
@@ -276,7 +210,7 @@ void process_page(uint64_t address, char *cached, uint64_t step_id) {
             struct insert_mem_msg *msg = malloc(sizeof(*msg));
             msg->address = address + offset;
             msg->step_id = step_id;
-            memcpy(msg->content, buffer, MEM_SEGMENT_SIZE);
+            memcpy(msg->content, buffer+offset, MEM_SEGMENT_SIZE);
             ch_write(insert_mem_ch, (char *)msg, sizeof(*msg));    // channel reader will free msg
         }
     }
@@ -296,7 +230,7 @@ void process_page(uint64_t address, char *cached, uint64_t step_id) {
  *              in arrey, sorted by start address to speed up address lookup
  *
  **************************************************************************/
-void cache_add_region(uint64_t address, uint64_t size) {
+void cache_add_region(uint64_t address, uint64_t size, uint64_t step_id) {
     /* look for potential position of new region in the cache */
     unsigned int index;
     for (index = 0; index < reg_count && cache[index].start <= address; index++);
@@ -323,29 +257,53 @@ void cache_add_region(uint64_t address, uint64_t size) {
     }
     new_reg->start = address;
     new_reg->end = address + size;
-    new_reg->page_count = size / PAGE_SIZE;     // size if always divisible by PAGE_SIZE because mem allocated in pages
-    new_reg->flags = FLAG_DIRTY;
-    /* bitmap must be divisible by 8 to speed up processing */
-    new_reg->bitmap = calloc(new_reg->page_count / 64 + (new_reg->page_count % 64 ? 1 : 0), sizeof(uint64_t));     // allocate enough 8-byte chunks, each for 64 pages
-    /* Set 1 for existing pages (all padding bits should be 0s) to force caching of new pages */
-    div_t res = div(new_reg->page_count, 8);
-    memset(new_reg->bitmap, 0xFF, res.quot);
-    if (res.rem) {
-        int mask = 0;
-        for (int i = 0; i < res.rem; i++) {
-            mask |= 0x80 >> i;
-        }
-        new_reg->bitmap[res.quot] = mask;
-    }
 
     /* it is important to use aligned momory as CPU instructions used by memdiff operates with aligned memory */
     posix_memalign((void **)&new_reg->pages, MEM_SEGMENT_SIZE, size);
-    memset(new_reg->pages, 0, size);
-    INFO("Added mem region at %" PRIx64 " for %" PRId64, address, size);
+    struct iovec local = {new_reg->pages, size};
+    struct iovec child = {(void *)address, size};
+    if (process_vm_readv(child_pid, &local, 1, &child, 1, 0) < (ssize_t)size) {
+        ERR("Cannot read child memory: %s", strerror(errno));
+        return;
+    }
+    for (uint64_t offset = 0; offset < size; offset += MEM_SEGMENT_SIZE) {
+        /* store memory change event in DB using workier */
+        struct insert_mem_msg *msg = malloc(sizeof(*msg));
+        msg->address = address + offset;
+        msg->step_id = step_id;
+        memcpy(msg->content, new_reg->pages + offset, MEM_SEGMENT_SIZE);
+        ch_write(insert_mem_ch, (char *)msg, sizeof(*msg));    // channel reader will free msg
+    }
+
+    INFO("Added mem region at 0x%" PRIx64 " for %" PRId64, address, size);
 }
 
-void cache_status(void) {
-    for (unsigned int i = 0; i < reg_count; i++) {
-        DBG("Reg %" PRIx64 " for %" PRId64, cache[i].start, cache[i].end - cache[i].start);
+
+/**************************************************************************
+ *
+ *  Function:   proc_dirty_mem
+ *
+ *  Params:     step_id
+  *
+ *  Return:     N/A
+ *
+ *  Descr:      Process page fault events and process dirty pages
+ *
+ **************************************************************************/
+void proc_dirty_mem(uint64_t step_id) {
+    uint64_t *address;
+    uint64_t page_address;
+    char *cached;
+    size_t size = sizeof(*address);
+    /* read and process until there is something to process */
+    while (CHANNEL_OK == ch_read(proc_mem_ch, (char **)&address, &size, READ_NONBLOCK)) {
+        DBG("Dirty addr 0x%" PRIx64 " at step %" PRId64, *address, step_id);
+        page_address = find_page(*address, &cached);
+        if (page_address) {
+            process_page(page_address, cached, step_id);
+        }
+
+        free(address);
     }
+    return;
 }

@@ -33,10 +33,7 @@
 #include <sys/types.h>
 
 int init_cache(pid_t pid);
-void cache_add_region(uint64_t start, uint64_t size);
-void mark_dirty(uint64_t address);
-int process_dirty(uint64_t step);
-
-extern char mem_dirty;
+void cache_add_region(uint64_t start, uint64_t size, uint64_t step_id);
+void proc_dirty_mem(uint64_t step_id);
 
 #endif

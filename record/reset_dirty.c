@@ -1,12 +1,14 @@
 /**************************************************************************
  *
- *  File:       reset_dirty.c
+ *  File:       mem_workers.c
  *
  *  Project:    Flight recorder (https://github.com/qrdl/flightrec)
  *
- *  Descr:      Control of special thread which resets memory page status
+ *  Descr:      Worker for resetting mem page soft-dirty flag
  *
- *  Notes:
+ *  Notes:      Counter-intuitively having one thread waiting to be
+ *              triggered is significantly cheaper then creating new thread
+ *              every time
  *
  **************************************************************************
  *
@@ -28,8 +30,11 @@
  **************************************************************************/
 #include <stdio.h>
 #include <pthread.h>
+#include <semaphore.h>
 #include <errno.h>
 #include <string.h>
+#include <stdint.h>
+#include <stdlib.h>
 
 #include "flightrec.h"
 #include "eel.h"
@@ -38,11 +43,7 @@
 static void *reset_dirty(void *);
 
 static FILE *clear_refs;
-static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
-static pthread_cond_t cond = PTHREAD_COND_INITIALIZER;
-
-static int busy;
-
+static sem_t start_sem, end_sem;
 
 /**************************************************************************
  *
@@ -63,11 +64,20 @@ int start_reset_dirty(pid_t pid) {
         ERR("Cannot open file '%s': %s", tmp, strerror(errno));
         return FAILURE;
     }
-    pthread_t reset_dirty_thread;
-    if (pthread_create(&reset_dirty_thread, NULL, reset_dirty, NULL)) {
-        ERR("Cannot start reset_dirty thread: %s", strerror(errno));
+    if (sem_init(&start_sem, 0, 0)) {
+        ERR("Cannot init the semaphoe for BPF thread sync: %s", strerror(errno));
         return FAILURE;
     }
+    if (sem_init(&end_sem, 0, 0)) {
+        ERR("Cannot init the semaphoe for BPF thread sync: %s", strerror(errno));
+        return FAILURE;
+    }
+    pthread_t reset_dirty_thread;
+    if (pthread_create(&reset_dirty_thread, NULL, reset_dirty, NULL)) {
+        ERR("Error starting reset_dirty thread: %s", strerror(errno));
+        return FAILURE;
+    }
+    pthread_setname_np(reset_dirty_thread, "fr_dirty");
     INFO("Reset dirty worker thread started");
     return SUCCESS;
 }
@@ -85,7 +95,9 @@ int start_reset_dirty(pid_t pid) {
  *
  **************************************************************************/
 void trigger_reset_dirty(void) {
-    pthread_cond_signal(&cond);
+    if (sem_post(&start_sem)) {
+        ERR("Cannot increment semaphore: %s", strerror(errno));
+    }
 }
 
 
@@ -101,19 +113,8 @@ void trigger_reset_dirty(void) {
  *
  **************************************************************************/
 void wait_reset_dirty(void) {
-    if (busy) {
-        /* wait for thread to release the mutex */
-        int ret = pthread_mutex_lock(&mutex);
-        if (ret) {
-            ERR("Error locking mutex: %s", strerror(errno));
-            return;
-        }
-        /* unlock mutex to allow it to be re-aquired by thread - thread will wait for condition */
-        ret = pthread_mutex_unlock(&mutex);
-        if (ret) {
-            ERR("Error locking mutex: %s", strerror(errno));
-            return;
-        }
+    if (sem_wait(&end_sem)) {
+        ERR("Cannot decrement semaphore: %s", strerror(errno));
     }
 }
 
@@ -122,12 +123,12 @@ void wait_reset_dirty(void) {
  *
  *  Function:   reset_dirty
  *
- *  Params:     N/A
+ *  Params:     unused
  *
- *  Return:     N/A
+ *  Return:     NULL
  *
- *  Descr:      Reset system dirty flag for all memory pages to force page
- *              faults on any change
+ *  Descr:      Thread function - reset soft-dirty flag for all memory
+ *              pages to force page faults on any change
  *
  **************************************************************************/
 void *reset_dirty(void* unused) {
@@ -135,37 +136,25 @@ void *reset_dirty(void* unused) {
     char buf = '4';     // '4' resets soft-dirty bits
 
     for (;;) {
-        /* need to acquire the lock because pthread_cond_wait() requires mutex to be locked */
-        int ret = pthread_mutex_lock(&mutex);
-        if (ret) {
-            ERR("Error locking mutex: %s", strerror(errno));
+        /* wait for trigger */
+        if (sem_wait(&start_sem)) {
+            ERR("Cannot decrement semaphore: %s", strerror(errno));
             return NULL;
         }
 
-        /* wait to be triggered by trigger_reset_dirty() */
-        ret = pthread_cond_wait(&cond, &mutex);
-        if (ret) {
-            ERR("Error waiting for condition: %s", strerror(errno));
-            return NULL;
-        }
-
-        busy = 1;
         /* actual job */
         rewind(clear_refs);
         if (!fwrite(&buf, 1, 1, clear_refs)) {
             ERR("Cannot write to clear_refs file");
             return NULL;
         }
-        busy = 0;
 
-        /* indicate to main thread that run is completed */
-        ret = pthread_mutex_unlock(&mutex);
-        if (ret) {
-            ERR("Error locking mutex: %s", strerror(errno));
+        /* signal end of processing */
+        if (sem_post(&end_sem)) {
+            ERR("Cannot increment semaphore: %s", strerror(errno));
             return NULL;
         }
     }
 
     return NULL;
 }
-

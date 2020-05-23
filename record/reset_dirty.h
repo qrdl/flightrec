@@ -4,7 +4,7 @@
  *
  *  Project:    Flight recorder (https://github.com/qrdl/flightrec)
  *
- *  Descr:      Control of special thread which resets memory page status
+ *  Descr:      Worker for resetting mem page soft-dirty flag
  *
  *  Notes:
  *
@@ -30,6 +30,7 @@
 #define _RESET_DIRTY_H
 
 #include <sys/types.h>
+#include <stdint.h>
 
 int start_reset_dirty(pid_t pid);
 void trigger_reset_dirty(void);

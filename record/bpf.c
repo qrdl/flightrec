@@ -170,6 +170,7 @@ int bpf_start(pid_t pid, void (* callback)(void *, void *, int)) {
         ERR("Cannot start thread for receiving perf events: %s", strerror(ret));
         return FAILURE;
     }
+    pthread_setname_np(worker_thread, "fr_bpf");
 
     return SUCCESS;
 }
@@ -217,7 +218,6 @@ void *bpf_poller(void *unused) {
     (void)unused;
     /* there is no normal exit from this loop, it runs until thread is cancelled externally */
     for (;;) {
-//        INFO("poll");
         perf_reader_poll(cpu_count, reader, -1);
     }
 

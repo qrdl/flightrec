@@ -30,7 +30,7 @@ CFLAGS := -Wall -Wextra -Wno-format-security -g3 -I../dab -I../stingray -I../jso
 LDLIBS := -lsqlite3 -ldwarf -lelf -ljson-c -lexpr -Lexpressions
 LDFLAGS := -pthread
 
-.PHONY: all clean depend expressions/libexpr.a
+.PHONY: all clean depend
 
 DEPEND = ../dab/dab.o ../stingray/stingray.o ../jsonapi/jsonapi.o
 OBJFILES = examine.o requests.o cmd_hash.o comms.o vars.o
@@ -38,7 +38,7 @@ OBJFILES = examine.o requests.o cmd_hash.o comms.o vars.o
 all: fr_examine
 
 fr_examine: $(OBJFILES) $(DEPEND) expressions/libexpr.a
-	$(CC) $(LDFLAGS) $^ -o $@ $(LDLIBS)
+	$(CC) $(LDFLAGS) $(OBJFILES) $(DEPEND) -o $@ $(LDLIBS)
 	cp $@ ../vscode_extension
 
 expressions/libexpr.a:
