@@ -113,8 +113,7 @@ static sem_t bpf_sem;
  *
  *  Function:   record
  *
- *  Params:     fr_path - path to FlightRec executable
- *              params - param vector to pass to exec(), first item
+ *  Params:     params - param vector to pass to exec(), first item
  *                       must contain program name
  *
  *  Return:     SUCCESS / FAILURE
@@ -122,7 +121,7 @@ static sem_t bpf_sem;
  *  Descr:      run process under tracer - the main loop
  *
  **************************************************************************/
-int record(char *fr_path, char *params[]) {
+int record(char *params[]) {
     int pid = fork();
     if (pid) {
         printf("Initialising ... ");
@@ -139,6 +138,10 @@ int record(char *fr_path, char *params[]) {
         if (mkfifo(fifo_name, S_IRUSR | S_IWUSR) && EEXIST != errno) {
             ERR("Cannot create named pipe: %s", strerror(errno));
             return FAILURE;
+        }
+        if (chown(fifo_name, uid, gid)) {
+            ERR("Cannot change pipe ownership: %s", strerror(errno));
+            return EXIT_FAILURE;
         }
         fifo_fd = open(fifo_name, O_RDONLY | O_NONBLOCK);
         if (fifo_fd < 0) {
@@ -236,7 +239,7 @@ int record(char *fr_path, char *params[]) {
         TIMER_START;        
         bpf_stop();
 
-        DAB_CLOSE(0);
+        DAB_CLOSE(DAB_FLAG_NONE);
         INFO("Waiting for worker threads to finish");
 
         /* Send termination to workers and wait for workers to finish. Because workers
@@ -257,19 +260,20 @@ int record(char *fr_path, char *params[]) {
             if (DAB_OK != DAB_EXEC("INSERT INTO misc (key, value) VALUES ('exit_signal', ?)", signum)) {
                 ERR("Cannot store exit signal in DB");
             }
+            DAB_CLOSE(DAB_FLAG_NONE);
         }
         TIMER_STOP("Finishing");
-        DAB_CLOSE(0);
-        /* TODO: change DB ownership, remove temp DBs */
     } else {
         /* child */
+        if (setuid(uid) || setgid(gid)) {
+            ERR("Cannot set ownership for child process: %s", strerror(errno));
+            exit(EXIT_FAILURE);
+        }
         if (-1 == ptrace(PTRACE_TRACEME, 0, NULL, NULL)) {
             ERR("Cannot start trace in the child - %s", strerror(errno));
             exit(EXIT_FAILURE);
         }
-        char preload[256];
-        sprintf(preload, "LD_PRELOAD=%s/fr_preload.so", fr_path);   // preload lib to intercept malloc() etc.
-        putenv(preload);
+        putenv("LD_PRELOAD=/usr/bin/fr_preload.so");    // preload lib to intercept malloc() etc.
         execvp(params[0], params);
         /* get here only in case of exec failure  */
         ERR("Cannot execute %s - %s", params[0], strerror(errno));

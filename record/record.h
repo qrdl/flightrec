@@ -30,6 +30,7 @@
 #define _RECORD_H
 
 #include <stdio.h>
+#include <sys/types.h>
 
 #include "stingray.h"
 
@@ -55,7 +56,7 @@ struct entry {
 };
 
 int dbg_srcinfo(char *name);
-int record(char *fr_path, char *params[]);
+int record(char *params[]);
 
 int create_db(void);
 int alter_db(void);
@@ -72,12 +73,13 @@ extern void *insert_var_decl;
 extern void *update_var_loc;
 extern void *insert_array;
 extern void *select_type;
-//extern void *select_line;
 
 extern FILE            *logfd;
 extern char            *acceptable_path;
 extern struct entry    *ignore_unit;
 extern struct entry    *process_unit;
-extern int unit_count;
+extern int              unit_count;
+extern uid_t            uid;
+extern gid_t            gid;
 
 #endif

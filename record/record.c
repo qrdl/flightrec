@@ -31,6 +31,7 @@
 #include <getopt.h>
 #include <errno.h>
 #include <unistd.h>
+#include <sys/types.h>
 #include <libgen.h>
 #include <linux/limits.h>
 
@@ -49,6 +50,8 @@ struct entry    *ignore_unit;
 struct entry    *process_unit;
 
 char *db_name;  // DB file name used by workers
+uid_t uid;
+gid_t gid;
 
 /**************************************************************************
  *
@@ -123,11 +126,23 @@ int main(int argc, char *argv[]) {
     }
     INFO("Processing sources under %s", acceptable_path);
 
-    db_name = malloc(strlen(argv[optind]) + 4);
+    db_name = malloc(strlen(argv[optind]) + sizeof(".fr_heap"));
     strcpy(db_name, argv[optind]);
     db_name = basename(db_name);
-    strcat(db_name, ".fr");
+    char *tail = db_name + strlen(db_name);
 
+    /* remove old DBs, including the temp ones that may not be deleted after failed run */
+    strcpy(tail, ".fr_mem");
+    if (remove(db_name) != 0 && ENOENT != errno) {
+        ERR("Cannot delete old DB - %s", strerror(errno));
+        return EXIT_FAILURE;
+    }   
+    strcpy(tail, ".fr_heap");
+    if (remove(db_name) != 0 && ENOENT != errno) {
+        ERR("Cannot delete old DB - %s", strerror(errno));
+        return EXIT_FAILURE;
+    }
+    strcpy(tail, ".fr");
     if (remove(db_name) != 0 && ENOENT != errno) {
         ERR("Cannot delete old DB - %s", strerror(errno));
         return EXIT_FAILURE;
@@ -147,6 +162,14 @@ int main(int argc, char *argv[]) {
         return EXIT_FAILURE;
     }
 
+    uid = getuid();
+    gid = getgid();
+
+    if (chown(db_name, uid, gid)) {
+        ERR("Cannot change DB ownership: %s", strerror(errno));
+        return EXIT_FAILURE;
+    }
+
     /* collect source file and line info */
     TIMER_START;
     if (SUCCESS != dbg_srcinfo(argv[optind])) {
@@ -155,12 +178,10 @@ int main(int argc, char *argv[]) {
     }
     TIMER_STOP("Collection of dbg info");
 
-    if (SUCCESS != record(dirname(strdup(argv[0])), &argv[optind])) {
+    if (SUCCESS != record(&argv[optind])) {
         ERR("Program execution failed");
         return EXIT_FAILURE;
     }
-
-    DAB_CLOSE(DAB_FLAG_NONE);
 
     return EXIT_SUCCESS;
 }

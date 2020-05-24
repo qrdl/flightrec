@@ -31,10 +31,16 @@
  *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *
  **************************************************************************/
+#include <stdio.h>
+#include <string.h>
+#include <errno.h>
+#include <unistd.h>
+
 #include "stingray.h"
 #include "dab.h"
 
 #include "flightrec.h"
+#include "record.h"
 #include "channel.h"
 #include "db_workers.h"
 #include "eel.h"
@@ -61,7 +67,7 @@ void *wrk_insert_step(void *arg) {
     void *insert;
     size_t counter = 0;
 
-    if (DAB_OK != DAB_OPEN("steps.fr", DAB_FLAG_CREATE)) {
+    if (DAB_OK != DAB_OPEN(db_name, DAB_FLAG_CREATE)) {
         return NULL;
     }
     if (DAB_UNEXPECTED != DAB_EXEC("PRAGMA journal_mode=OFF")) {    // PRAGMA returns data we are not interested in
@@ -130,17 +136,7 @@ void *wrk_insert_step(void *arg) {
         DAB_ROLLBACK;
         return NULL;
     }
-
     DAB_CURSOR_FREE(insert);
-
-    char tmp[256];
-    sprintf(tmp, "ATTACH '%s' AS fr", db_name);
-    if (DAB_OK != DAB_EXEC(tmp)) {
-        return NULL;
-    }
-    if (DAB_OK != DAB_EXEC("CREATE TABLE fr.step AS SELECT * FROM main.step")) {
-        return NULL;
-    }
 
     DAB_CLOSE(DAB_FLAG_NONE);
 
@@ -164,13 +160,21 @@ void *wrk_insert_heap(void *arg) {
     void *insert, *update;
     size_t counter = 0;
 
-    if (DAB_OK != DAB_OPEN("heap.fr", DAB_FLAG_CREATE)) {
+    char *local_db_name = malloc(strlen(db_name) + sizeof("_heap"));
+    strcpy(local_db_name, db_name);
+    strcat(local_db_name, "_heap");
+
+    if (DAB_OK != DAB_OPEN(local_db_name, DAB_FLAG_CREATE)) {
         return NULL;
     }
     if (DAB_UNEXPECTED != DAB_EXEC("PRAGMA journal_mode=OFF")) {    // PRAGMA returns data we are not interested in
         return NULL;
     }
     if (DAB_OK != DAB_EXEC("PRAGMA synchronous=OFF")) {    // PRAGMA returns data we are not interested in
+        return NULL;
+    }
+    if (chown(local_db_name, uid, gid)) {
+        ERR("Cannot change DB ownership: %s", strerror(errno));
         return NULL;
     }
 
@@ -263,6 +267,7 @@ void *wrk_insert_heap(void *arg) {
     }
 
     DAB_CLOSE(DAB_FLAG_NONE);
+    remove(local_db_name);
 
     return (void*)1;    // non-NULL means success
 }
@@ -284,13 +289,21 @@ void *wrk_insert_mem(void *arg) {
     void *insert;
     size_t counter = 0;
 
-    if (DAB_OK != DAB_OPEN("mem.fr", DAB_FLAG_CREATE)) {     // already in multi-threaded mode
+    char *local_db_name = malloc(strlen(db_name) + sizeof("_mem"));
+    strcpy(local_db_name, db_name);
+    strcat(local_db_name, "_mem");
+
+    if (DAB_OK != DAB_OPEN(local_db_name, DAB_FLAG_CREATE)) {
         return NULL;
     }
     if (DAB_UNEXPECTED != DAB_EXEC("PRAGMA journal_mode=OFF")) {    // PRAGMA returns data we are not interested in
         return NULL;
     }
     if (DAB_OK != DAB_EXEC("PRAGMA synchronous=OFF")) {    // PRAGMA returns data we are not interested in
+        return NULL;
+    }
+    if (chown(local_db_name, uid, gid)) {
+        ERR("Cannot change DB ownership: %s", strerror(errno));
         return NULL;
     }
 
@@ -365,6 +378,7 @@ void *wrk_insert_mem(void *arg) {
     }
 
     DAB_CLOSE(DAB_FLAG_NONE);
+    remove(local_db_name);
 
     return (void*)1;    // non-NULL means success
 }
