@@ -102,7 +102,10 @@ void *wrk_insert_step(void *arg) {
     }
     struct sr registers;
     while (CHANNEL_OK == ch_read(ch, (char **)&msg, &size, READ_BLOCK)) {
-        DAB_CURSOR_RESET(insert);
+        if (DAB_OK != DAB_CURSOR_RESET(insert)) {
+            DAB_ROLLBACK;
+            return NULL;
+        }
         /* manualy assemble Stingray string to be used as BLOB */
         registers.val = (char *)&msg->regs;
         registers.size = registers.len = sizeof(msg->regs);
@@ -210,7 +213,10 @@ void *wrk_insert_heap(void *arg) {
     }
     while (CHANNEL_OK == ch_read(ch, (char **)&msg, &size, READ_BLOCK)) {
         if (msg->size) {
-            DAB_CURSOR_RESET(insert);
+            if (DAB_OK != DAB_CURSOR_RESET(insert)) {
+                DAB_ROLLBACK;
+                return NULL;
+            }
             if (DAB_OK != DAB_CURSOR_BIND(insert,
                     msg->address,
                     msg->size,
@@ -222,9 +228,9 @@ void *wrk_insert_heap(void *arg) {
                 DAB_ROLLBACK;
                 return NULL;
             }
-        } else {
-            DAB_CURSOR_RESET(update);
-            if (DAB_OK != DAB_CURSOR_BIND(update,
+        } else {            
+            if (DAB_OK != DAB_CURSOR_RESET(update) ||
+                DAB_OK != DAB_CURSOR_BIND(update,
                     msg->step_id,
                     msg->address)) {
                 DAB_ROLLBACK;
@@ -267,7 +273,9 @@ void *wrk_insert_heap(void *arg) {
     }
 
     DAB_CLOSE(DAB_FLAG_NONE);
-    remove(local_db_name);
+    if (remove(local_db_name)) {
+        ERR("Cannot remove temporary DB: %s", strerror(errno));
+    }
 
     return (void*)1;    // non-NULL means success
 }
@@ -329,7 +337,10 @@ void *wrk_insert_mem(void *arg) {
     }
     struct sr content;
     while (CHANNEL_OK == ch_read(ch, (char **)&msg, &size, READ_BLOCK)) {
-        DAB_CURSOR_RESET(insert);
+        if (DAB_OK != DAB_CURSOR_RESET(insert)) {
+            DAB_ROLLBACK;
+            return NULL;
+        }
         /* manualy assemble Stingray string to be used as BLOB */
         content.val = msg->content;
         content.size = content.len = sizeof(msg->content);
@@ -378,7 +389,9 @@ void *wrk_insert_mem(void *arg) {
     }
 
     DAB_CLOSE(DAB_FLAG_NONE);
-    remove(local_db_name);
+    if (remove(local_db_name)) {
+        ERR("Cannot remove temporary DB: %s", strerror(errno));
+    }
 
     return (void*)1;    // non-NULL means success
 }

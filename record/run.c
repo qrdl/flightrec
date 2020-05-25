@@ -253,7 +253,9 @@ int record(char *params[]) {
         bpf_stop();
 
         close(fifo_fd);
-        remove(fifo_name);
+        if (remove(fifo_name)) {
+            ERR("Cannot remove pipe: %s", strerror(errno));
+        }
 
         /* TODO I don't know why but inserting of signal into DB fails with 'locked', so DB close/open helps */
         if (signum) {
@@ -348,8 +350,8 @@ int set_breakpoints(pid_t pid) {
                                                     &cur_unit->end));
             cur_unit++) {
         cur_unit->lines = malloc(sizeof(struct cached_line) * cur_unit->line_count);
-        DAB_CURSOR_RESET(line_cursor);
-        if (DAB_OK != DAB_CURSOR_BIND(line_cursor, unit_id)) {
+        
+        if (DAB_OK != DAB_CURSOR_RESET(line_cursor) || DAB_OK != DAB_CURSOR_BIND(line_cursor, unit_id)) {
             return FAILURE;
         }
         for (   struct cached_line *cur_line = cur_unit->lines;
@@ -493,6 +495,7 @@ int process_breakpoint(pid_t pid) {
     REG_TYPE int3 = 0xCC;    // INT 3
     int wait_reset;
 
+    DBG("mem_dirty is %d", mem_dirty);
     if (mem_dirty) {
         /* trigger reset_dirty thread to reset clear_refs. This is the slowest process so trigger it
            as early as possible*/
@@ -684,7 +687,7 @@ void bpf_callback(void *unused, void *data, int data_size) {
             uint64_t *address = malloc(sizeof(*address));
             *address = event->payload;
             /* TODO: Compare what is faster - filter unknown address before sending or let workers deal with it */
-            ch_write(proc_mem_ch, (char *)address, sizeof(address));
+            ch_write(proc_mem_ch, (char *)address, sizeof(*address));
             mem_dirty = 1;
             break;
         case BPF_EVT_MMAPENTRY:
@@ -741,7 +744,7 @@ int get_base_address(pid_t p, uint64_t *base) {
     char tmp[256];
 
     // read executable name from /proc/<pid>/exe
-    snprintf(tmp, sizeof(tmp), "/proc/%d/exe", p);
+    snprintf(tmp, sizeof(tmp), "/proc/%d/exe", p);      // coverity[fs_check_call]
     ssize_t res = readlink(tmp, exe_name, sizeof(exe_name) - 1);
     if (res < 0) {
         ERR("Cannot get executable name from '%s': %s", tmp, strerror(errno));

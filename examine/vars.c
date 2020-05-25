@@ -314,8 +314,8 @@ int add_var_items(JSON_OBJ *container, ULONG ref_id, unsigned int start, unsigne
         )) {
             return FAILURE;
         }
-    } else {
-        DAB_CURSOR_RESET(array_cursor);
+    } else if (DAB_OK != DAB_CURSOR_RESET(array_cursor)) {
+        return FAILURE;
     }
     if (DAB_OK != DAB_CURSOR_BIND(array_cursor, ref_id)) {
         return FAILURE;
@@ -373,8 +373,8 @@ int add_var_fields(JSON_OBJ *container, ULONG ref_id) {
         )) {
             return FAILURE;
         }
-    } else {
-        DAB_CURSOR_RESET(struct_cursor);
+    } else if (DAB_OK != DAB_CURSOR_RESET(struct_cursor)) {
+        return FAILURE;
     }
     if (DAB_OK != DAB_CURSOR_BIND(struct_cursor, ref_id)) {
         return FAILURE;
@@ -398,8 +398,8 @@ int add_var_fields(JSON_OBJ *container, ULONG ref_id) {
         )) {
             return FAILURE;
         }
-    } else {
-        DAB_CURSOR_RESET(member_cursor);
+    } else if (DAB_OK != DAB_CURSOR_RESET(member_cursor)) {
+        return FAILURE;
     }
     if (DAB_OK != DAB_CURSOR_BIND(member_cursor, type)) {
         return FAILURE;
@@ -979,9 +979,9 @@ int get_var_ref(int parent_type, ULONG parent, const char *child, ULONG address,
         )) {
             return FAILURE;
         }
-    } else {
-        DAB_CURSOR_RESET(ref_upsert);
-        DAB_CURSOR_RESET(ref_cursor);
+    } else if ( DAB_OK != DAB_CURSOR_RESET(ref_upsert) ||
+                DAB_OK != DAB_CURSOR_RESET(ref_cursor)) {
+        return FAILURE;
     }
 
     if (    DAB_OK != DAB_CURSOR_BIND(ref_upsert, parent_type, parent, child, address, type, indirect) ||

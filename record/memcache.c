@@ -87,7 +87,7 @@ int init_cache(pid_t pid) {
     memdiff = best_memdiff(MEM_SEGMENT_SIZE);
     child_pid = pid;
 
-    snprintf(tmp, sizeof(tmp), "/proc/%d/exe", pid);
+    snprintf(tmp, sizeof(tmp), "/proc/%d/exe", pid);    // coverity[fs_check_call]
     ssize_t res = readlink(tmp, exe_name, sizeof(exe_name) - 1);
     if (res < 0) {
         ERR("Cannot get executable name from '%s': %s", tmp, strerror(errno));
