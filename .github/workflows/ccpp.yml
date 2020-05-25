@@ -34,12 +34,12 @@ jobs:
       uses: actions/upload-artifact@v1
       with:
         name: record
-        path: fr_record
+        path: record/fr_record
     - name: Save Preload artifact
       uses: actions/upload-artifact@v1
       with:
         name: preload
-        path: fr_preload.so
+        path: record/fr_preload.so
     - name: Save VS Code extension artifact
       uses: actions/upload-artifact@v1
       with:

@@ -110,7 +110,7 @@ static struct cached_unit *instr_cache;
 static volatile char mem_dirty;
 static uint64_t step_id = 0;
 static sem_t bpf_sem;
-static int stop;
+static volatile int stop;
 
 /**************************************************************************
  *
