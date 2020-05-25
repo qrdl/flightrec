@@ -10,7 +10,7 @@
  *
  **************************************************************************
  *
- *  Copyright (C) 2017-2020 Ilya Caramishev (ilya@qrdl.com)
+ *  Copyright (C) 2017-2020 Ilya Caramishev (flightrec@qrdl.com)
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU Affero General Public License as
@@ -41,7 +41,8 @@ struct timespec timer_started;
 #define TIMER_STOP(msg) do { \
     struct timespec timer_stopped; \
     clock_gettime(CLOCK_MONOTONIC_RAW, &timer_stopped); \
-    double diff = timer_stopped.tv_sec - timer_started.tv_sec + (timer_stopped.tv_nsec - timer_started.tv_nsec) / 1000000000.0; \
+    double diff = timer_stopped.tv_sec - timer_started.tv_sec + \
+                            (timer_stopped.tv_nsec - timer_started.tv_nsec) / 1000000000.0; \
     INFO("%s took %.3lf sec", msg, diff); \
 } while (0)
 #else

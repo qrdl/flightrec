@@ -27,7 +27,7 @@ jobs:
     - name: Make everything
       run: make
     - name: Install
-      run: cd record && make install
+      run: sudo make -C record install
     - name: Run tests
       run: cd test && make run
     - name: Save Record artifact

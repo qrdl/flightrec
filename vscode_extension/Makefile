@@ -6,12 +6,12 @@
 #
 #  Descr:      	VSCode extension makefile
 #
-#  Notes:	It produces VSIX file which needs to be installed in
-#		VSCode as extention
+#  Notes:       It produces VSIX file which needs to be installed in
+#               VSCode as extention
 #
 ##########################################################################
 #
-#  Copyright (C) 2017-2020 Ilya Caramishev (ilya@qrdl.com)
+#  Copyright (C) 2017-2020 Ilya Caramishev (flightrec@qrdl.com)
 #
 #  This program is free software: you can redistribute it and/or modify
 #  it under the terms of the GNU Affero General Public License as

@@ -6,8 +6,8 @@
  *
  *  Descr:      eBPF program tracing
  *
- *  Notes:      Record uses eBPF rpogrmas to detect following events,
- *              related to tracee:
+ *  Notes:      Use eBPF progrmas to detect following events, related to
+ *              tracee:
  *              - page fault
  *              - mmap entry and exit (need exit to get actual address)
  *              - munmap entry (don't care about exit)
@@ -15,7 +15,7 @@
  *
  **************************************************************************
  *
- *  Copyright (C) 2017-2020 Ilya Caramishev (ilya@qrdl.com)
+ *  Copyright (C) 2017-2020 Ilya Caramishev (flightrec@qrdl.com)
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU Affero General Public License as
@@ -57,7 +57,7 @@ typedef void* (*five_args) (int, const char*, const char*,                perf_r
 typedef int   (*three_args)(int, const char*, const char*);
 
 #define BPF_ATTACH_TRACEPOINT(FD,CAT,NAME) _Generic(bpf_attach_tracepoint, \
-    eight_args:     ({ eight_args tmp = (void *)&bpf_attach_tracepoint; tmp((FD),(CAT),(NAME),pid,-1,-1,NULL,NULL); }), \
+    eight_args:     ({ eight_args tmp = (void *)&bpf_attach_tracepoint; tmp((FD),(CAT),(NAME),pid,-1,-1,NULL,NULL); }),\
     five_args:      ({ five_args  tmp = (void *)&bpf_attach_tracepoint; tmp((FD),(CAT),(NAME),NULL,NULL); }), \
     three_args:     ({ three_args tmp = (void *)&bpf_attach_tracepoint; tmp((FD),(CAT),(NAME)); }) \
 )
@@ -93,7 +93,7 @@ int bpf_start(pid_t pid, void (* callback)(void *, void *, int)) {
             "perf_map",
             sizeof(uint32_t),   // key size
             sizeof(uint32_t),   // value size
-            1024,              // max entries
+            65536,              // max entries - 1 MB array ought to be enough
             0);                 // flags
     if (map_fd < 0) {
         ERR("Failed to create map: %s", strerror(errno));
@@ -148,7 +148,7 @@ int bpf_start(pid_t pid, void (* callback)(void *, void *, int)) {
     for (int cpu = 0; cpu < cpu_count; cpu++) {
         reader[cpu] = bpf_open_perf_buffer(
                 callback,               // perf event read callback
-                &lost_event,           // lost events callback
+                &lost_event,            // lost events callback
                 NULL,
                 pid,                    // pid, seems to be ignored
                 cpu,                    // CPU
@@ -188,7 +188,6 @@ int bpf_start(pid_t pid, void (* callback)(void *, void *, int)) {
  *
  **************************************************************************/
 void bpf_stop(void) {
-    INFO("stopping BPF thread");
     pthread_cancel(worker_thread);
 
     for (int i = 0; i < cpu_count; i++) {
@@ -267,7 +266,7 @@ struct bpf_insn *get_bpf_program(int pid, int map_fd, int event_type, int payloa
         BPF_LD_IMM64_RAW(BPF_REG_1, BPF_REG_0, 0xFFFFFFFF00000000),
         BPF_BITWISE32_REG(BPF_AND, BPF_REG_0, BPF_REG_1),   // r0 &= r1
         BPF_LD_IMM64_RAW(BPF_REG_1, BPF_REG_0, 0),          // r1 = pid (0 is a placeholder)
-        BPF_JMP_REG(BPF_JNE, BPF_REG_0, BPF_REG_1, 13),     // if (r1 != r0) goto exit (13 is number of instructions to skip)
+        BPF_JMP_REG(BPF_JNE, BPF_REG_0, BPF_REG_1, 13),     // if (r1 != r0) goto exit (13 is nr of instr to skip)
 
         /* get address from event context (offset 8) and store it into the send buffer */
         BPF_MOV64_IMM(BPF_REG_1, 0),                        // r1 = event_type (0 is a placeholder)

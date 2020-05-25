@@ -10,7 +10,7 @@
  *
  **************************************************************************
  *
- *  Copyright (C) 2017-2020 Ilya Caramishev (ilya@qrdl.com)
+ *  Copyright (C) 2017-2020 Ilya Caramishev (flightrec@qrdl.com)
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU Affero General Public License as
@@ -497,7 +497,8 @@ int get_location(Dwarf_Attribute attrib, REG_TYPE pc, LLONG base_addr, struct us
                             *address = (LLONG)opd1 + program_base_addr;
                             break;
                         case DW_OP_fbreg:           // address relative to frame base, signed
-                            *address = (LLONG)opd1;     // opd1 is unsigned but holds a negative signed value, so casting to signed type fixes it
+                            *address = (LLONG)opd1;     // opd1 is unsigned but holds a negative signed value,
+                                                        // so casting to signed type fixes it
                             break;
                         case DW_OP_call_frame_cfa:
                             ERR("DW_OP_call_frame_cfa is not supported");
@@ -844,7 +845,7 @@ int add_var_entry(JSON_OBJ *container, int parent_type, ULONG parent, char *name
                 case __SIZEOF_DOUBLE__:
                     sprintf(new_val, "%lg", *(double *)mem);
                     break;
-#if __SIZEOF_LONG_DOUBLE__ > __SIZEOF_DOUBLE__      // only when long double is longer than double - to avoid compile error with equal cases
+#if __SIZEOF_LONG_DOUBLE__ > __SIZEOF_DOUBLE__      // to avoid compile error with equal cases
                 case __SIZEOF_LONG_DOUBLE__:
                     sprintf(new_val, "%Lg", *(long double *)mem);
                     break;
@@ -956,7 +957,7 @@ int get_var_ref(int parent_type, ULONG parent, const char *child, ULONG address,
         )) {
             return FAILURE;
         }
-        /* unlike 'INSERT OR REPLACE', 'ON CONFLICT DO UPDATE' doesn't delete the existing record so 'id' doesn't change */
+        /* unlike 'INSERT OR REPLACE', 'ON CONFLICT DO UPDATE' doesn't delete the existing record so 'id' remains */
         if (DAB_OK != DAB_CURSOR_PREPARE(&ref_upsert, "INSERT INTO local.ref "
                 "(parent_type, parent, child, address, type, indirect) "
                 "VALUES "
@@ -1136,7 +1137,8 @@ struct sr *type_name(ULONG type_offset, int indirect) {
         )) {
             return NULL;
         }
-    } else if (DAB_OK != DAB_CURSOR_RESET(type_name_cursor) || DAB_OK != DAB_CURSOR_BIND(type_name_cursor, type_offset)) {
+    } else if ( DAB_OK != DAB_CURSOR_RESET(type_name_cursor) ||
+                DAB_OK != DAB_CURSOR_BIND(type_name_cursor, type_offset)) {
         return NULL;
     }
 

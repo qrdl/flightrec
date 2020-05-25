@@ -6,12 +6,12 @@
  *
  *  Descr:      Common definitions
  *
- *  Notes:      Memeory-related definitions and functions, used mostly by
+ *  Notes:      Memory-related definitions and functions, used mostly by
  *              'record' component
  *
  **************************************************************************
  *
- *  Copyright (C) 2017-2020 Ilya Caramishev (ilya@qrdl.com)
+ *  Copyright (C) 2017-2020 Ilya Caramishev (flightrec@qrdl.com)
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU Affero General Public License as

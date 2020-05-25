@@ -10,7 +10,7 @@
  *
  **************************************************************************
  *
- *  Copyright (C) 2017-2020 Ilya Caramishev (ilya@qrdl.com)
+ *  Copyright (C) 2017-2020 Ilya Caramishev (flightrec@qrdl.com)
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU Affero General Public License as
@@ -46,6 +46,7 @@
 #define __USE_XOPEN 1
 #endif
 #include <stdio.h>
+#include <sys/auxv.h>
 
 #include "stingray.h"
 #include "eel.h"
@@ -97,8 +98,10 @@ static void bpf_callback(void *cookie, void *data, int data_size);
 static int fifo_fd = 0;                 // FIFO for receiving alloc/free events from fr_preload.so
 static struct channel *insert_step_ch;  // Channel for communicating with step insertion worker
 static struct channel *insert_heap_ch;  // Channel for communicating with heap event insertion worker
-struct channel *insert_mem_ch;          // Channel for communicating with mem insertion worker, not-static because is used in memcache.c
-struct channel *proc_mem_ch;            // Channel for communicating with mem workers, non-static because used in mem_workers.c
+struct channel *insert_mem_ch;          // Channel for communicating with mem insertion worker,
+                                        // not-static because is used in memcache.c
+struct channel *proc_mem_ch;            // Channel for communicating with mem workers,
+                                        // non-static because used in mem_workers.c
 /* child program base address. Addresses from debug info may or may not contain base address, so if accessing child
    memory fails, assume addresses need to be adjusted by base address */
 static uint64_t base_address = 0;
@@ -106,8 +109,8 @@ static uint64_t base_address = 0;
 static struct cached_unit *instr_cache;
 static volatile char mem_dirty;
 static uint64_t step_id = 0;
-
 static sem_t bpf_sem;
+static int stop;
 
 /**************************************************************************
  *
@@ -231,13 +234,13 @@ int record(char *params[]) {
                 return FAILURE;
             }
         }
+        stop = 1;
         TIMER_STOP("Client tracing");
         printf("---------- 8< ----------\n");
         printf("Finishing ... ");
         fflush(stdout);
 
-        TIMER_START;        
-        bpf_stop();
+        TIMER_START;
 
         DAB_CLOSE(DAB_FLAG_NONE);
         INFO("Waiting for worker threads to finish");
@@ -247,9 +250,10 @@ int record(char *params[]) {
         WAIT_DB_WORKER(step);
         WAIT_DB_WORKER(heap);
         WAIT_DB_WORKER(mem);
+        bpf_stop();
 
         close(fifo_fd);
-        unlink(fifo_name);
+        remove(fifo_name);
 
         /* TODO I don't know why but inserting of signal into DB fails with 'locked', so DB close/open helps */
         if (signum) {
@@ -299,7 +303,7 @@ int record(char *params[]) {
  **************************************************************************/
 int set_breakpoints(pid_t pid) {
     int ret = SUCCESS;
-    void *unit_cursor, *line_cursor;    // these statements are declared and used in-place because set_breakpoints() called just once
+    void *unit_cursor, *line_cursor;
     REG_TYPE int3 = 0xCC;    // INT 3
     int db_stat;
 
@@ -378,9 +382,10 @@ int set_breakpoints(pid_t pid) {
                         ERR("Cannot peek at child code - %s", strerror(errno));
                         RETCLEAN(FAILURE);
                     }
+                } else {
+                    ERR("Cannot peek at child code - %s", strerror(errno));
+                    RETCLEAN(FAILURE);
                 }
-                ERR("Cannot peek at child code - %s", strerror(errno));
-                RETCLEAN(FAILURE);
             }
             cur_line->org_instr_byte = instr & 0xFF;
             /* update child code */
@@ -524,7 +529,7 @@ int process_breakpoint(pid_t pid) {
     }
     if (mem_dirty && FUNC_FLAG_START != line->func_flag) {
         proc_dirty_mem(step_id);
-        mem_dirty = 0;      //it is important to reset it here because next instruction can cause PF and set it back to 1
+        mem_dirty = 0;      // important to reset it here because next instruction can cause PF and set it back to 1
     }
 
     /* Store new step using worker */
@@ -533,7 +538,7 @@ int process_breakpoint(pid_t pid) {
     msg->step_id = step_id;
     msg->depth = depth;
     msg->func_id = func_id;
-    msg->address = pc;
+    msg->address = pc - base_address;
     msg->regs = regs;   // regs is struct, not a pointer, so it will be copied
     ch_write(insert_step_ch, (char *)msg, sizeof(*msg));    // channel reader will free msg
 
@@ -650,6 +655,10 @@ void bpf_callback(void *unused, void *data, int data_size) {
     static int count = 0;
     static uint64_t brk_boundary = 0;
 
+    if (stop) {
+        return;     // ignore events coming after child stop
+    }
+
     struct bpf_event *event = data;
     if (BPF_EVT_SIGNAL == event->type) {
         DBG("signal %ld", event->payload);
@@ -720,6 +729,11 @@ void bpf_callback(void *unused, void *data, int data_size) {
  *
  *  Descr:      Find base address from program executable memory region
  *              address
+ * 
+ *  Note:       I don't like thius method but I cannot find anything better
+ *              Address is needed before child program is really started
+ *              so registers aren't available yet, AT_BASE field of aux
+ *              vector (x86_64 ABI) doesn't provide needed address
  *
  **************************************************************************/
 int get_base_address(pid_t p, uint64_t *base) {
@@ -759,7 +773,7 @@ int get_base_address(pid_t p, uint64_t *base) {
         if (field && !strcmp(field, exe_name)) {
             /* first field, already 0-terminated, has start and end address */
             sscanf(tmp, "%" PRIx64, base);
-	    INFO("Base %" PRIx64, *base);
+	        INFO("Base 0x%" PRIx64, *base);
             break;
        }
     }

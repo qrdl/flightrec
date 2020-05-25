@@ -10,7 +10,7 @@
  *
  **************************************************************************
  *
- *  Copyright (C) 2017-2020 Ilya Caramishev (ilya@qrdl.com)
+ *  Copyright (C) 2017-2020 Ilya Caramishev (flightrec@qrdl.com)
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU Affero General Public License as
@@ -116,7 +116,7 @@ int process_init(const JSON_OBJ *request, int fd) {
     // specify capabilities
 #define SET_TRUE(C)  JSON_NEW_TRUE_FIELD(body, #C)
 #define SET_FALSE(C)  JSON_NEW_FALSE_FIELD(body, #C)
-    // configurationDone is needed to prevent IDE from sending setBreakpoints before the 'launch', when DB is not available
+    // configurationDone is needed to prevent IDE from sending setBreakpoints before the 'launch', when DB is not opened
     SET_TRUE(supportsConfigurationDoneRequest);
     SET_TRUE(supportsStepBack);
     SET_TRUE(supportsGotoTargetsRequest);
@@ -360,7 +360,7 @@ int process_stack(const JSON_OBJ *request, int fd) {
     if (!stack_cursor) {
         // TODO: Probably recursive query is faster, but I didn't figure it out yet
         if (DAB_OK != DAB_CURSOR_OPEN(&stack_cursor,
-            "SELECT DISTINCT "       // distinct is required not to get duplicate records when more then one statement on the line
+            "SELECT DISTINCT "       // distinct is required not to get duplicate records when several stmts on the line
                 "f.id, "
                 "f.name, "
                 "f.path, "
@@ -378,7 +378,8 @@ int process_stack(const JSON_OBJ *request, int fd) {
                     "fun.id = s.function_id "
             "WHERE "
                 "s.id IN ("
-                    "SELECT MAX(id) FROM step WHERE id <= ? AND depth <= ? GROUP BY depth"     // TODO: may benefit from index by id + depth
+                    // TODO: may benefit from index by id + depth
+                    "SELECT MAX(id) FROM step WHERE id <= ? AND depth <= ? GROUP BY depth"
                 ")"
             "ORDER BY "
                 "s.depth DESC",
@@ -387,7 +388,8 @@ int process_stack(const JSON_OBJ *request, int fd) {
             error = "Cannot prepare statement";
             RETCLEAN(FAILURE);
         }
-    } else if (DAB_OK != DAB_CURSOR_RESET(stack_cursor) || DAB_OK != DAB_CURSOR_BIND(stack_cursor, cur_step, cur_depth)) {
+    } else if ( DAB_OK != DAB_CURSOR_RESET(stack_cursor) ||
+                DAB_OK != DAB_CURSOR_BIND(stack_cursor, cur_step, cur_depth)) {
         error = "Cannot query stack trace";
         RETCLEAN(FAILURE);
     }
@@ -399,7 +401,8 @@ int process_stack(const JSON_OBJ *request, int fd) {
     ULONG line, file_id, scope_id, step_id, id = 0;
     struct frame *prev_frame = NULL, *cur_frame = frame_list;
     int db_err;
-    while (DAB_OK == (db_err = DAB_CURSOR_FETCH(stack_cursor, &file_id, &filename, &path, &line, &fun_name, &scope_id, &step_id))) {
+    while (DAB_OK == (db_err = DAB_CURSOR_FETCH(stack_cursor, &file_id, &filename, &path, &line, &fun_name,
+                &scope_id, &step_id))) {
         // add entry to frame list
         if (!cur_frame) {
             cur_frame = malloc(sizeof(*cur_frame));
@@ -503,7 +506,8 @@ int process_next(const JSON_OBJ *request, int fd) {
             error = "Cannot prepare statement";
             RETCLEAN(FAILURE);
         }
-    } else if (DAB_OK != DAB_CURSOR_RESET(next_cursor) || DAB_OK != DAB_CURSOR_BIND(next_cursor, cur_step, cur_depth, cur_file, cur_line)) {
+    } else if (DAB_OK != DAB_CURSOR_RESET(next_cursor) || DAB_OK != DAB_CURSOR_BIND(next_cursor, cur_step,
+                cur_depth, cur_file, cur_line)) {
         error = "Cannot query next step";
         RETCLEAN(FAILURE);
     }
@@ -675,7 +679,8 @@ int process_stepout(const JSON_OBJ *request, int fd) {
             error = "Cannot prepare statement";
             RETCLEAN(FAILURE);
         }
-    } else if (DAB_OK != DAB_CURSOR_RESET(stepout_cursor) || DAB_OK != DAB_CURSOR_BIND(stepout_cursor, cur_step, cur_depth)) {
+    } else if ( DAB_OK != DAB_CURSOR_RESET(stepout_cursor) ||
+                DAB_OK != DAB_CURSOR_BIND(stepout_cursor, cur_step, cur_depth)) {
         error = "Cannot query next step";
         RETCLEAN(FAILURE);
     }
@@ -769,7 +774,8 @@ int process_stepback(const JSON_OBJ *request, int fd) {
             error = "Cannot prepare statement";
             RETCLEAN(FAILURE);
         }
-    } else if (DAB_OK != DAB_CURSOR_RESET(stepback_cursor) || DAB_OK != DAB_CURSOR_BIND(stepback_cursor, cur_step, cur_depth, cur_file, cur_line)) {
+    } else if ( DAB_OK != DAB_CURSOR_RESET(stepback_cursor) ||
+                DAB_OK != DAB_CURSOR_BIND(stepback_cursor, cur_step, cur_depth, cur_file, cur_line)) {
         error = "Cannot query next step";
         RETCLEAN(FAILURE);
     }
@@ -1078,7 +1084,8 @@ int process_revcontinue(const JSON_OBJ *request, int fd) {
             error = "Cannot prepare statement";
             RETCLEAN(FAILURE);
         }
-    } else if (DAB_OK != DAB_CURSOR_RESET(revcontinue_cursor) || DAB_OK != DAB_CURSOR_BIND(revcontinue_cursor, cur_step)) {
+    } else if ( DAB_OK != DAB_CURSOR_RESET(revcontinue_cursor) ||
+                DAB_OK != DAB_CURSOR_BIND(revcontinue_cursor, cur_step)) {
         error = "Cannot query next breakpoint";
         RETCLEAN(FAILURE);
     }
@@ -1299,7 +1306,8 @@ int process_variables(const JSON_OBJ *request, int fd) {
                     error = "Cannot prepare statement";
                     RETCLEAN(FAILURE);
                 }
-            } else if (DAB_OK != DAB_CURSOR_RESET(local_vars_cursor) || DAB_OK != DAB_CURSOR_BIND(local_vars_cursor, cur_frame->scope, cur_frame->scope)) {
+            } else if ( DAB_OK != DAB_CURSOR_RESET(local_vars_cursor) ||
+                        DAB_OK != DAB_CURSOR_BIND(local_vars_cursor, cur_frame->scope, cur_frame->scope)) {
                 error = "Cannot query next breakpoint";
                 RETCLEAN(FAILURE);
             }
