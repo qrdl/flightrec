@@ -583,6 +583,13 @@ int process_breakpoint(pid_t pid) {
         return FAILURE;
     }
     set_ip(pid, pc);
+
+    if (wait_reset) {
+        /* wait for memory wotker threads to finish, have to do it before stepping into the program because it can
+           modify data, so all references for all pages must be cleared */
+        wait_reset_dirty();
+    }
+
     if (-1 == ptrace(PTRACE_SINGLESTEP, pid, NULL, NULL)) {
         ERR("Cannot restore original instruction - %s", strerror(errno));
         return FAILURE;
@@ -599,11 +606,6 @@ int process_breakpoint(pid_t pid) {
     if (-1 == ptrace(PTRACE_POKEDATA, pid, (void *)pc, (void *)((instr & ~0xFF) | int3))) {
         ERR("Cannot update child code - %s", strerror(errno));
         return FAILURE;
-    }
-
-    if (wait_reset) {
-        /* wait for memory wotker threads to finish */
-        wait_reset_dirty();
     }
 
     return SUCCESS;
