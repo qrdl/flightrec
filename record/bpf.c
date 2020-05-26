@@ -64,7 +64,10 @@ typedef int   (*three_args)(int, const char*, const char*);
 
 static struct bpf_insn *get_bpf_program(int pid, int map_fd, int event_type, int payload_offset, int *size);
 static void *bpf_poller(void *);
-static void lost_event(uint64_t count);     // TODO: do I really need it?
+#ifndef LOST_CB_ARGS
+#define LOST_CB_ARGS	unsigned long count
+#endif
+static void lost_event(LOST_CB_ARGS);
 
 static int fd_count;
 static int fds_to_close[16];
@@ -297,8 +300,8 @@ struct bpf_insn *get_bpf_program(int pid, int map_fd, int event_type, int payloa
 }
 
 // TODO: do I really need it?
-void lost_event(uint64_t count) {
-    WARN("%" PRId64 " events lost\n", count);
+void lost_event(LOST_CB_ARGS) {
+    WARN("%lu events lost\n", count);
 }
 
 #ifdef UNITTEST

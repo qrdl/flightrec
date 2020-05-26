@@ -37,6 +37,13 @@ else
 endif
 LDLIBS := -lsqlite3 -ldwarf -lelf $(LIBBPF)
 
+# libbpf.h may be missing declaration of perf_reader_cb type but bpf.c needs it, so
+# add a macro for it and for some changed function names
+TEST := $(shell printf "\#include <stddef.h>\n\#include <stdint.h>\n\#include <fcntl.h>\n\#include <bcc/libbpf.h>\nperf_reader_cb foo;" | gcc -c -xc - 2>/dev/null)
+ifneq ($(.SHELLSTATUS), 0)
+	BPF_FLAGS := -imacros bpf_compat.h -Wno-unused-parameter
+endif
+
 
 .PHONY : all clean depend install uninstall
 
@@ -54,7 +61,10 @@ fr_preload.so: preload.c
 
 memdiff.o: memdiff.c
 # explicitly allow support for AVX512. Actual decision re using AVX512 or AVX2 or SSE2 is made at runtime
-	$(CC) $(CFLAGS) -march=native -c memdiff.c -o $@
+	$(CC) $(CFLAGS) -march=native -c -o $@ memdiff.c
+
+bpf.o: bpf.c
+	$(CC) $(CFLAGS) $(BPF_FLAGS) -c -o $@ bpf.c
 
 clean:
 	rm -f fr_record fr_preload.so $(OBJFILES) core

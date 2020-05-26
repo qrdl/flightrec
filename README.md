@@ -23,7 +23,7 @@ Flightrec was tested only on x86-64 architecture, however it should be possible 
 ### OS
 Flightrec supports only 64-bit Linux and it uses some Linux-specific (non-POSIX) APIs for monitoring memory. There are no plans to support other OSes.
 
-Linux kernel must have `CONFIG_PROC_PAGE_MONITOR` switched on to generate `/proc/<pid>/pagemap` file, which is default for most distribution, but not for WLS (Windows Subsystem for Linux), therefore Flightrec doesn't work under WSL. Also Linux kernel must support eBPF (standard for all recent kernel versions).
+Linux kernel must have `CONFIG_PROC_PAGE_MONITOR` switched on to generate `/proc/<pid>/clear_refs` file, which is default for most distribution, but not for WLS (Windows Subsystem for Linux), therefore Flightrec doesn't work under WSL. Also Linux kernel must support eBPF (standard for all recent kernel versions).
 
 ### Languages and compilers
 For now Flightrec supports only client binaries, compiled from C using GCC compiler. There are plans to support other compilers and languages, and there were some encouraging tests with Go using native Go compiler.

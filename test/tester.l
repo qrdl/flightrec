@@ -39,7 +39,7 @@ E	[Ee][+-]?{D}+
 #include <string.h>
 
 #include "tester.h"
-#include "y.tab.h"
+#include "tester.tab.h"
 
 void yyerror(const char *s);
 

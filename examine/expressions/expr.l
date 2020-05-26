@@ -47,7 +47,7 @@ S   [ \t\v\n\f]
 #include "flightrec.h"
 #include "expression.h"
 #include "expr_internal.h"
-#include "y.tab.h"
+#include "expr.tab.h"
 
 void yyerror(struct ast_node **node, const char *s);
 

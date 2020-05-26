@@ -1,6 +1,6 @@
 /**************************************************************************
  *
- *  File:       test.c
+ *  File:       tester.c
  *
  *  Project:    Flight recorder (https://github.com/qrdl/flightrec)
  *
