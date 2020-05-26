@@ -39,11 +39,8 @@ LDLIBS := -lsqlite3 -ldwarf -lelf $(LIBBPF)
 
 # libbpf.h may be missing declaration of perf_reader_cb type but bpf.c needs it, so
 # add a macro for it and for some changed function names
-TEST := $(shell printf "\#include <stddef.h>\n\#include <stdint.h>\n\#include <fcntl.h>\n\#include <bcc/libbpf.h>\nperf_reader_cb foo;" | gcc -c -xc - 2>/dev/null)
-ifneq ($(.SHELLSTATUS), 0)
-	BPF_FLAGS := -imacros bpf_compat.h -Wno-unused-parameter
-endif
-
+BPF_FLAGS := $(shell printf "\#include <stddef.h>\n\#include <stdint.h>\n\#include <fcntl.h>\n\#include <bcc/libbpf.h>\nperf_reader_cb foo;" \
+			| gcc -c -xc - 2>/dev/null || echo "-imacros bpf_compat.h -Wno-unused-parameter")
 
 .PHONY : all clean depend install uninstall
 
