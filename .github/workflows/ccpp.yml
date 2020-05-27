@@ -22,22 +22,24 @@ jobs:
         cd ..
     - name: Install other dependencies
       run: |
-        sudo apt-get install -y libdwarf-dev libelf-dev libsqlite3-dev gperf nodejs npm bison flex
+        sudo apt-get install -y libdwarf-dev libelf-dev libsqlite3-dev gperf nodejs npm bison flex libbpfcc-dev
         sudo npm install vsce -g
     - name: Make everything
       run: make
+    - name: Install
+      run: sudo make -C record install
     - name: Run tests
       run: cd test && make run
     - name: Save Record artifact
       uses: actions/upload-artifact@v1
       with:
         name: record
-        path: fr_record
+        path: record/fr_record
     - name: Save Preload artifact
       uses: actions/upload-artifact@v1
       with:
         name: preload
-        path: fr_preload.so
+        path: record/fr_preload.so
     - name: Save VS Code extension artifact
       uses: actions/upload-artifact@v1
       with:

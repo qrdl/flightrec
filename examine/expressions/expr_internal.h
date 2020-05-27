@@ -11,7 +11,7 @@
  *
  **************************************************************************
  *
- *  Copyright (C) 2017-2020 Ilya Caramishev (ilya@qrdl.com)
+ *  Copyright (C) 2017-2020 Ilya Caramishev (flightrec@qrdl.com)
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU Affero General Public License as
@@ -120,9 +120,11 @@ struct ast_node {
     };
 };
 
-int get_var_details(const char *name, uint64_t scope, uint64_t *var_id, uint64_t *type_offset, int *kind, size_t *size, int *indirect);
+int get_var_details(const char *name, uint64_t scope, uint64_t *var_id, uint64_t *type_offset, int *kind, size_t *size,
+                    int *indirect);
 int get_base_type_details(uint64_t offset, uint64_t *type_offset, int *kind, size_t *size, int *indirect);
-int get_field_details(const char *name, uint64_t type, uint64_t *type_offset, int *kind, size_t *size, uint64_t *start, int *indirect);
+int get_field_details(const char *name, uint64_t type, uint64_t *type_offset, int *kind, size_t *size, uint64_t *start,
+                    int *indirect);
 int get_struct_details(const char *name, uint64_t *offset, int *kind, size_t *size);
 int get_type_details(const char *name, uint64_t *offset, int *kind, size_t *size);
 

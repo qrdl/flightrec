@@ -10,7 +10,7 @@
  *
  **************************************************************************
  *
- *  Copyright (C) 2017-2020 Ilya Caramishev (ilya@qrdl.com)
+ *  Copyright (C) 2017-2020 Ilya Caramishev (flightrec@qrdl.com)
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU Affero General Public License as
@@ -78,6 +78,7 @@ static int proc_aggr_member(Dwarf_Debug dbg, Dwarf_Die parent_die, ULONG unit_id
 static int proc_enum_item(Dwarf_Debug dbg, Dwarf_Die parent_die, ULONG unit_id, Dwarf_Off offset);
 static int proc_var(Dwarf_Debug dbg, Dwarf_Die die, ULONG scope_id, ULONG unit_id);
 
+int unit_count;
 
 static int get_attrs(Dwarf_Debug dbg, Dwarf_Die die, struct die_attr*attr_list);
 static void cleanup_attrs(Dwarf_Debug dbg, struct die_attr *attr_list);
@@ -131,9 +132,12 @@ int dbg_srcinfo(char *name) {
         RETCLEAN(FAILURE);
     }
 
+    printf("Collecting debug info ... ");
+    fflush(stdout);
     while (SUCCESS == (ret = proc_unit(dbg)));
     if (END == ret) {
         ret = SUCCESS;   // all units processed ok
+        printf("%d units processed ok\n", unit_count);
     }
 
     if (SUCCESS != alter_db()) {
@@ -142,9 +146,6 @@ int dbg_srcinfo(char *name) {
     }
 
 cleanup:
-    if (fd > 0) {
-        close(fd);
-    }
     if (err) {
         dwarf_dealloc(dbg, err, DW_DLA_ERROR);
     }
@@ -152,6 +153,9 @@ cleanup:
         dwarf_finish(dbg, &err);
         dwarf_dealloc(dbg, err, DW_DLA_ERROR);
         /* dbg cannot be freed, according to libdwarf manual rev 1.63, Sep'06 */
+    }
+    if (fd > 0) {
+        close(fd);
     }
 
     return ret;
@@ -236,7 +240,8 @@ int proc_unit(Dwarf_Debug dbg) {
         }
     }
 
-    INFO("Processing unit %s", name);
+    DBG("Processing unit %s", name);
+    unit_count++;
     if (DAB_OK != DAB_BEGIN) {
         RETCLEAN(FAILURE);
     } else {
@@ -648,7 +653,7 @@ int proc_block(Dwarf_Debug dbg, Dwarf_Die die, ULONG unit_id, ULONG scope_id, UL
 
         /* consider ranges as contiguous block, take start line from first one, and finish line from last one */
         lo_addr = cu_base_address + ranges[0].dwr_addr1;
-        hi_addr = cu_base_address + ranges[count-2].dwr_addr2;      // Last range entry is terminator, so take the penultimate one
+        hi_addr = cu_base_address + ranges[count-2].dwr_addr2;      // Last entry is terminator, so the penultimate one
 
         dwarf_ranges_dealloc(dbg, ranges, count);
     }
@@ -1246,8 +1251,10 @@ int get_attrs(Dwarf_Debug dbg, Dwarf_Die die, struct die_attr *attr_list) {
             case DW_FORM_data2:     /* FALLTHROUGH */
             case DW_FORM_data4:     /* FALLTHROUGH */
             case DW_FORM_data8:
-                /* DW_FORM_dataX form is context-dependend, as per DWARF standard, it can be either signed or unsigned */
-                if (DW_AT_decl_line == attr_list[i].attr_id || DW_AT_decl_file == attr_list[i].attr_id || DW_AT_byte_size == attr_list[i].attr_id) {
+                /* DW_FORM_dataX form is context-dependend, as per DWARF standard, can be either signed or unsigned */
+                if (    DW_AT_decl_line == attr_list[i].attr_id ||
+                        DW_AT_decl_file == attr_list[i].attr_id ||
+                        DW_AT_byte_size == attr_list[i].attr_id) {
                     ret = dwarf_formudata(attrib, (Dwarf_Unsigned *)attr_list[i].var, &err);
                 } else {
                     ret = dwarf_formsdata(attrib, (Dwarf_Signed *)attr_list[i].var, &err);
@@ -1320,7 +1327,8 @@ int get_attrs(Dwarf_Debug dbg, Dwarf_Die die, struct die_attr *attr_list) {
         };
         /* sanity check */
         if (DW_AT_decl_file == attr_list[i].attr_id && *(ULLONG *)attr_list[i].var > (ULLONG)cnt_file) {
-            ERR("Decl file ID %ld exceed the count %d at offset 0x%llx", (long)attr_list[i].var, (int)cnt_file, die_offset(die));
+            ERR("Decl file ID %ld exceed the count %d at offset 0x%llx", (long)attr_list[i].var, (int)cnt_file,
+                    die_offset(die));
             RETCLEAN(MALFUNCTION);
         }
     }

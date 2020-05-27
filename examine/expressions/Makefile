@@ -10,7 +10,7 @@
 #
 ##########################################################################
 #
-#  Copyright (C) 2017-2020 Ilya Caramishev (ilya@qrdl.com)
+#  Copyright (C) 2017-2020 Ilya Caramishev (flightrec@qrdl.com)
 #
 #  This program is free software: you can redistribute it and/or modify
 #  it under the terms of the GNU Affero General Public License as
@@ -32,7 +32,7 @@ CFLAGS := -Wall -Wextra -g3 -I../../dab -I../../stingray -I../.. -I../../jsonapi
 
 all: libexpr.a
 
-libexpr.a: y.tab.o lex.yy.o expression.o
+libexpr.a: expr.tab.o lex.yy.o expression.o
 	ar -rcs $@ $^
 
 test: test.c expression.h libexpr.a
@@ -41,15 +41,15 @@ test: test.c expression.h libexpr.a
 expression.o: expression.c expression.h
 	$(CC) -c $(CFLAGS) -o $@ expression.c
 
-lex.yy.o: expr.l y.tab.h expression.h
-	lex expr.l
+lex.yy.o: expr.l expr.tab.h expression.h
+	flex expr.l
 	$(CC) -c -o $@ lex.yy.c -I../.. -I../../jsonapi
 
-y.tab.o: expr.y expression.h
-	yacc -d expr.y
-#	yacc -d -t expr.y
-	$(CC) -c -o $@ y.tab.c -I../.. -I../../jsonapi
+expr.tab.o: expr.y expression.h
+	bison -d expr.y
+#	bison -d -t expr.y
+	$(CC) -c -o $@ expr.tab.c -I../.. -I../../jsonapi
 
 clean:
-	rm -f lex.yy.c y.tab.c y.tab.h test expression.o lex.yy.o y.tab.o libexpr.a
+	rm -f lex.yy.c expr.tab.c expr.tab.h test expression.o lex.yy.o expr.tab.o libexpr.a
 

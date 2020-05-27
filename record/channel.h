@@ -10,7 +10,7 @@
  *
  **************************************************************************
  *
- *  Copyright (C) 2017-2020 Ilya Caramishev (ilya@qrdl.com)
+ *  Copyright (C) 2017-2020 Ilya Caramishev (flightrec@qrdl.com)
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU Affero General Public License as
@@ -35,12 +35,16 @@
 #define CHANNEL_FAIL    2
 #define CHANNEL_MISREAD 3
 #define CHANNEL_END     4
+#define CHANNEL_NODATA  5
+
+#define READ_NONBLOCK   0
+#define READ_BLOCK      1
 
 struct channel;
 
 struct channel *ch_create(void);
 int ch_write(struct channel *ch, char *buf, size_t bufsize);
-int ch_read(struct channel *ch, char **buf, size_t *bufsize);
+int ch_read(struct channel *ch, char **buf, size_t *bufsize, int flag);
 int ch_finish(struct channel *ch);
 void ch_destroy(struct channel *ch);
 

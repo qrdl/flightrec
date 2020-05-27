@@ -10,7 +10,7 @@
  *
  **************************************************************************
  *
- *  Copyright (C) 2017-2020 Ilya Caramishev (ilya@qrdl.com)
+ *  Copyright (C) 2017-2020 Ilya Caramishev (flightrec@qrdl.com)
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU Affero General Public License as
@@ -30,8 +30,25 @@
 #define _RECORD_H
 
 #include <stdio.h>
+#include <sys/types.h>
 
 #include "stingray.h"
+
+#ifdef TIMING
+#include <time.h>
+struct timespec timer_started;
+#define TIMER_START clock_gettime(CLOCK_MONOTONIC_RAW, &timer_started)
+#define TIMER_STOP(msg) do { \
+    struct timespec timer_stopped; \
+    clock_gettime(CLOCK_MONOTONIC_RAW, &timer_stopped); \
+    double diff = timer_stopped.tv_sec - timer_started.tv_sec + \
+                            (timer_stopped.tv_nsec - timer_started.tv_nsec) / 1000000000.0; \
+    INFO("%s took %.3lf sec", msg, diff); \
+} while (0)
+#else
+#define TIMER_START
+#define TIMER_STOP(msg)
+#endif
 
 /* linked list, used for storing names of units to include/exclude */
 struct entry {
@@ -40,7 +57,7 @@ struct entry {
 };
 
 int dbg_srcinfo(char *name);
-int record(char *fr_path, char *params[]);
+int record(char *params[]);
 
 int create_db(void);
 int alter_db(void);
@@ -57,11 +74,13 @@ extern void *insert_var_decl;
 extern void *update_var_loc;
 extern void *insert_array;
 extern void *select_type;
-extern void *select_line;
 
 extern FILE            *logfd;
 extern char            *acceptable_path;
 extern struct entry    *ignore_unit;
 extern struct entry    *process_unit;
+extern int              unit_count;
+extern uid_t            real_uid;
+extern gid_t            real_gid;
 
 #endif

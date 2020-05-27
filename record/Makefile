@@ -10,7 +10,7 @@
 #
 ##########################################################################
 #
-#  Copyright (C) 2017-2020 Ilya Caramishev (ilya@qrdl.com)
+#  Copyright (C) 2017-2020 Ilya Caramishev (flightrec@qrdl.com)
 #
 #  This program is free software: you can redistribute it and/or modify
 #  it under the terms of the GNU Affero General Public License as
@@ -26,35 +26,62 @@
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #
 ##########################################################################
-CFLAGS := -D_GNU_SOURCE -Wall -Wextra -g -I../stingray -I../dab -I..
-LDLIBS := -lsqlite3 -ldwarf -lelf
+CFLAGS := -DTIMING -D_GNU_SOURCE -Wall -Wextra -g -I../stingray -I../dab -I..
 LDFLAGS := -pthread
 
-.PHONY : all clean depend
+# libbpf package adds either libbpf or libbcc library
+ifeq (,$(findstring libbpf,$(shell /sbin/ldconfig -p)))
+    LIBBPF = -lbcc
+else
+    LIBBPF = -lbpf
+endif
+LDLIBS := -lsqlite3 -ldwarf -lelf $(LIBBPF)
+
+# there are several versions of libbpf API, so conditionall include extra headers to adapt to it
+BPF_FLAGS := $(shell printf "\#include <stddef.h>\n\#include <stdint.h>\n\#include <fcntl.h>\n\#include <bcc/libbpf.h>\nperf_reader_cb foo;" \
+			| gcc -c -xc - 2>/dev/null || echo "-Dperf_reader_cb=\"void*\" -DLOST_CB_ARGS=\"void *unused,unsigned long count\" -Wno-unused-parameter")
+BPF_FLAGS += $(shell printf "\#include <stddef.h>\n\#include <stdint.h>\n\#include <fcntl.h>\n\#include <bcc/libbpf.h>\nint main(void) { return bpf_create_map(0,0,0,0,0,0); }" \
+			| gcc -Werror -xc -c - 2>/dev/null || echo "-Dbpf_create_map=bcc_create_map -Dbpf_prog_load=bcc_prog_load")
+
+.PHONY : all clean depend install uninstall
 
 DEPEND = ../dab/dab.o ../stingray/stingray.o
-OBJFILES = record.o db.o run.o dbginfo.o memdiff.o mem.o channel.o workers.o
+OBJFILES = record.o db.o run.o dbginfo.o memdiff.o channel.o db_workers.o \
+	memcache.o bpf.o reset_dirty.o
 
 all: fr_record fr_preload.so
 
 fr_record: $(OBJFILES) $(DEPEND)
 	$(CC) $(LDFLAGS) $^ -o $@ $(LDLIBS)
-	cp $@ ..
 
 fr_preload.so: preload.c
 	$(CC) $(CFLAGS) -ldl -shared -fPIC $^ -o $@
-	cp $@ ..
 
 memdiff.o: memdiff.c
 # explicitly allow support for AVX512. Actual decision re using AVX512 or AVX2 or SSE2 is made at runtime
-	$(CC) $(CFLAGS) -march=native -c memdiff.c -o $@
+	$(CC) $(CFLAGS) -march=native -c -o $@ memdiff.c
 
-mem.o: mem.c
-# explicitly allow support for AVX. Actual decision re using AVX is made at runtime
-	$(CC) $(CFLAGS) -c mem.c -o $@
+bpf.o: bpf.c
+	$(CC) $(CFLAGS) $(BPF_FLAGS) -c -o $@ bpf.c
 
 clean:
 	rm -f fr_record fr_preload.so $(OBJFILES) core
+
+install:
+ifneq "$(shell whoami)" "root"
+	$(error "Must be root to run install")
+else
+	cp fr_record fr_preload.so /usr/bin
+	chown root /usr/bin/fr_record /usr/bin/fr_preload.so
+	chmod a+s /usr/bin/fr_record
+endif
+
+uninstall:
+ifneq "$(shell whoami)" "root"
+	$(error "Must be root to run uninstall")
+else
+	rm /usr/bin/fr_record /usr/bin/fr_preload.so
+endif
 
 depend: $(OBJFILES:.o=.c)
 	makedepend -Y. -I../stingray -I../dab -I.. -I. $^ 2>/dev/null
@@ -65,13 +92,16 @@ record.o: ../dab/dab.h ../eel.h ../flightrec.h record.h
 db.o: ../stingray/stingray.h ../generics.h ../stingray/sr_internal.h
 db.o: ../dab/dab.h ../eel.h ../flightrec.h record.h
 run.o: ../stingray/stingray.h ../generics.h ../stingray/sr_internal.h
-run.o: ../eel.h ../dab/dab.h ../flightrec.h record.h ../mem.h channel.h
-run.o: workers.h
+run.o: ../eel.h ../dab/dab.h ../flightrec.h record.h ../mem.h memcache.h
+run.o: channel.h bpf.h db_workers.h reset_dirty.h
 dbginfo.o: ../stingray/stingray.h ../generics.h ../stingray/sr_internal.h
 dbginfo.o: ../dab/dab.h ../eel.h ../flightrec.h record.h
-mem.o: ../eel.h ../stingray/stingray.h ../generics.h
-mem.o: ../stingray/sr_internal.h ../dab/dab.h ../flightrec.h record.h
-mem.o: ../mem.h channel.h workers.h
 channel.o: ../eel.h channel.h
-workers.o: ../stingray/stingray.h ../generics.h ../stingray/sr_internal.h
-workers.o: ../dab/dab.h ../flightrec.h channel.h workers.h ../mem.h ../eel.h
+db_workers.o: ../stingray/stingray.h ../generics.h ../stingray/sr_internal.h
+db_workers.o: ../dab/dab.h ../flightrec.h channel.h db_workers.h ../mem.h
+db_workers.o: ../eel.h
+memcache.o: ../flightrec.h record.h ../stingray/stingray.h ../generics.h
+memcache.o: ../stingray/sr_internal.h ../eel.h ../mem.h memcache.h
+memcache.o: db_workers.h channel.h
+bpf.o: ../flightrec.h ../eel.h bpf.h
+reset_dirty.o: ../flightrec.h ../eel.h reset_dirty.h

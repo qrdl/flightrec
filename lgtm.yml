@@ -11,6 +11,7 @@ extraction:
         - bison
         - flex
         - gperf
+        - libbpfcc-dev
     after_prepare:    # Customizable step used by all languages.
       - export GNU_MAKE=make
       - export GIT=true

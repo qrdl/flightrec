@@ -10,7 +10,7 @@
  *
  **************************************************************************
  *
- *  Copyright (C) 2017-2020 Ilya Caramishev (ilya@qrdl.com)
+ *  Copyright (C) 2017-2020 Ilya Caramishev (flightrec@qrdl.com)
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU Affero General Public License as
@@ -31,6 +31,7 @@
 #include <getopt.h>
 #include <errno.h>
 #include <unistd.h>
+#include <sys/types.h>
 #include <libgen.h>
 #include <linux/limits.h>
 
@@ -49,6 +50,8 @@ struct entry    *ignore_unit;
 struct entry    *process_unit;
 
 char *db_name;  // DB file name used by workers
+uid_t real_uid;
+gid_t real_gid;
 
 /**************************************************************************
  *
@@ -65,6 +68,9 @@ int main(int argc, char *argv[]) {
     logfd = stderr;
     int c;
 
+    real_uid = getuid();
+    real_gid = getgid();
+
     while ((c = getopt(argc, argv, "p:x:i:l:")) != -1) {
         if ('p' == c) {
             acceptable_path = optarg;
@@ -72,6 +78,10 @@ int main(int argc, char *argv[]) {
             FILE *tmp = fopen(optarg, "w");
             if (!tmp) {
                 fprintf(stderr, "Cannot open log file '%s' : %s", optarg, strerror(errno));
+                return EXIT_FAILURE;
+            }
+            if (fchown(fileno(tmp), real_uid, real_gid)) {
+                ERR("Cannot change logfile ownership: %s", strerror(errno));
                 return EXIT_FAILURE;
             }
             logfd = tmp;
@@ -123,11 +133,23 @@ int main(int argc, char *argv[]) {
     }
     INFO("Processing sources under %s", acceptable_path);
 
-    db_name = malloc(strlen(argv[optind]) + 4);
+    db_name = malloc(strlen(argv[optind]) + sizeof(".fr_heap"));
     strcpy(db_name, argv[optind]);
     db_name = basename(db_name);
-    strcat(db_name, ".fr");
+    char *tail = db_name + strlen(db_name);
 
+    /* remove old DBs, including the temp ones that may not be deleted after failed run */
+    strcpy(tail, ".fr_mem");
+    if (remove(db_name) != 0 && ENOENT != errno) {
+        ERR("Cannot delete old DB - %s", strerror(errno));
+        return EXIT_FAILURE;
+    }   
+    strcpy(tail, ".fr_heap");
+    if (remove(db_name) != 0 && ENOENT != errno) {
+        ERR("Cannot delete old DB - %s", strerror(errno));
+        return EXIT_FAILURE;
+    }
+    strcpy(tail, ".fr");
     if (remove(db_name) != 0 && ENOENT != errno) {
         ERR("Cannot delete old DB - %s", strerror(errno));
         return EXIT_FAILURE;
@@ -138,22 +160,32 @@ int main(int argc, char *argv[]) {
     }
 
     /* TODO Assume using WAL2 when it becomes available in SQLite */
-    if (DAB_UNEXPECTED != DAB_EXEC("PRAGMA journal_mode=WAL")) {    // PRAGMA returns data we are not interested in
+    /* Switch to fastest possible SQLite mode - without any recovery. Any failure may lead to corrupted DB,
+       but if Recorder failed data isn't usable anyway */
+    if (DAB_UNEXPECTED != DAB_EXEC("PRAGMA journal_mode=OFF")) {    // PRAGMA returns data we are not interested in
+        return EXIT_FAILURE;
+    }
+    if (DAB_OK != DAB_EXEC("PRAGMA synchronous=OFF")) {    // PRAGMA returns data we are not interested in
+        return EXIT_FAILURE;
+    }
+
+    if (chown(db_name, real_uid, real_gid)) {
+        ERR("Cannot change DB ownership: %s", strerror(errno));
         return EXIT_FAILURE;
     }
 
     /* collect source file and line info */
+    TIMER_START;
     if (SUCCESS != dbg_srcinfo(argv[optind])) {
         ERR("Cannot process source file and line debug info");
         return EXIT_FAILURE;
     }
+    TIMER_STOP("Collection of dbg info");
 
-    if (SUCCESS != record(dirname(strdup(argv[0])), &argv[optind])) {
+    if (SUCCESS != record(&argv[optind])) {
         ERR("Program execution failed");
         return EXIT_FAILURE;
     }
-
-    DAB_CLOSE(DAB_FLAG_NONE);
 
     return EXIT_SUCCESS;
 }

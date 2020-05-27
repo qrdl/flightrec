@@ -13,7 +13,7 @@
  *
  **************************************************************************
  *
- *  Copyright (C) 2017-2020 Ilya Caramishev (ilya@qrdl.com)
+ *  Copyright (C) 2017-2020 Ilya Caramishev (flightrec@qrdl.com)
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU Affero General Public License as
@@ -118,7 +118,7 @@ int ch_write(struct channel *ch, char *buf, size_t bufsize) {
         return CHANNEL_FAIL;
     }
 
-    if (0!= sem_post(&ch->sem)) {       // signal the reader
+    if (sem_post(&ch->sem)) {       // signal the reader
         ERR("Cannot increment the semaphore: %s", strerror(errno));
         return CHANNEL_FAIL;
     }
@@ -135,17 +135,27 @@ int ch_write(struct channel *ch, char *buf, size_t bufsize) {
  *              buf - where to store the message
  *              bufsize - where to store the message size
  *
- *  Return:     CHANNEL_OK / CHANNEL_FAIL / CHANNEL_END
+ *  Return:     CHANNEL_OK / CHANNEL_FAIL / CHANNEL_END / CHANNEL_NODATA
  *
  *  Descr:      Read from channel
  *
- *  Notes:      Reading blocks if there is nothing to read.
+ *  Notes:      Reading blocks when there is nothing to read if flag is
+ *              READ_BLOCK.
  *              Returns CHANNEL_END when get empty message.
  *              It is responsibility of the reader to destroy message after use
  *
  **************************************************************************/
-int ch_read(struct channel *ch, char **buf, size_t *bufsize) {
-    if (0 != sem_wait(&ch->sem)) {      // wait for data
+int ch_read(struct channel *ch, char **buf, size_t *bufsize, int flag) {
+    int ret;
+    if (READ_BLOCK == flag) {
+        ret = sem_wait(&ch->sem);
+    } else {
+        ret = sem_trywait(&ch->sem);
+    }  
+    if (0 != ret) {      // wait for data
+        if (EAGAIN == errno) {
+            return CHANNEL_NODATA;
+        }
         ERR("Cannot decrement the semaphore: %s", strerror(errno));
         return CHANNEL_FAIL;
     }

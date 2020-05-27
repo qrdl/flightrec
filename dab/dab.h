@@ -10,7 +10,7 @@
  *
  **************************************************************************
  *
- *  Copyright (C) 2017-2020 Ilya Caramishev (ilya@qrdl.com)
+ *  Copyright (C) 2017-2020 Ilya Caramishev (flightrec@qrdl.com)
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU Affero General Public License as
@@ -58,7 +58,8 @@
 #define DAB_EXEC(A, ...) dab_exec(__FILE__, __LINE__, (A), VAR(NUMARGS(__VA_ARGS__), ##__VA_ARGS__))
 
 /* Queries using cursor */
-#define DAB_CURSOR_OPEN(C, A, ...) dab_cursor_open(__FILE__, __LINE__, (C), (A), VAR(NUMARGS(__VA_ARGS__), ##__VA_ARGS__))
+#define DAB_CURSOR_OPEN(C, A, ...) dab_cursor_open(__FILE__, __LINE__, (C), (A), VAR(NUMARGS(__VA_ARGS__), \
+                                                    ##__VA_ARGS__))
 #define DAB_CURSOR_PREPARE(C, A, ...) dab_cursor_prepare(__FILE__, __LINE__, (C), (A))
 #define DAB_CURSOR_BIND(C, ...) dab_cursor_bind(__FILE__, __LINE__, (C), VAR(NUMARGS(__VA_ARGS__), ##__VA_ARGS__))
 #define DAB_CURSOR_FETCH(C, ...) dab_cursor_fetch(__FILE__, __LINE__, (C), PVAR(NUMARGS(__VA_ARGS__), ##__VA_ARGS__))

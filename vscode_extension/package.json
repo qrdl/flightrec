@@ -6,7 +6,7 @@
 	"description": "Flight Recorder's examine.",
 	"author": {
 		"name": "qrdl",
-		"email": "ilya@qrdl.com"
+		"email": "flightrec@qrdl.com"
 	},
 	"license": "GNU AGPL 3.0",
 	"engines": {
