@@ -37,10 +37,11 @@ else
 endif
 LDLIBS := -lsqlite3 -ldwarf -lelf $(LIBBPF)
 
-# libbpf.h may be missing declaration of perf_reader_cb type but bpf.c needs it, so
-# add a macro for it and for some changed function names
+# there are several versions of libbpf API, so conditionall include extra headers to adapt to it
 BPF_FLAGS := $(shell printf "\#include <stddef.h>\n\#include <stdint.h>\n\#include <fcntl.h>\n\#include <bcc/libbpf.h>\nperf_reader_cb foo;" \
-			| gcc -c -xc - 2>/dev/null || echo "-imacros bpf_compat.h -Wno-unused-parameter")
+			| gcc -c -xc - 2>/dev/null || echo "-Dperf_reader_cb=\"void*\" -DLOST_CB_ARGS=\"void *unused,unsigned long count\" -Wno-unused-parameter")
+BPF_FLAGS += $(shell printf "\#include <stddef.h>\n\#include <stdint.h>\n\#include <fcntl.h>\n\#include <bcc/libbpf.h>\nint main(void) { return bpf_create_map(0,0,0,0,0,0); }" \
+			| gcc -Werror -xc -c - 2>/dev/null || echo "-Dbpf_create_map=bcc_create_map -Dbpf_prog_load=bcc_prog_load")
 
 .PHONY : all clean depend install uninstall
 
