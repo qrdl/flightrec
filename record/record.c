@@ -50,8 +50,8 @@ struct entry    *ignore_unit;
 struct entry    *process_unit;
 
 char *db_name;  // DB file name used by workers
-uid_t uid;
-gid_t gid;
+uid_t real_uid;
+gid_t real_gid;
 
 /**************************************************************************
  *
@@ -68,6 +68,9 @@ int main(int argc, char *argv[]) {
     logfd = stderr;
     int c;
 
+    real_uid = getuid();
+    real_gid = getgid();
+
     while ((c = getopt(argc, argv, "p:x:i:l:")) != -1) {
         if ('p' == c) {
             acceptable_path = optarg;
@@ -75,6 +78,10 @@ int main(int argc, char *argv[]) {
             FILE *tmp = fopen(optarg, "w");
             if (!tmp) {
                 fprintf(stderr, "Cannot open log file '%s' : %s", optarg, strerror(errno));
+                return EXIT_FAILURE;
+            }
+            if (fchown(fileno(tmp), real_uid, real_gid)) {
+                ERR("Cannot change logfile ownership: %s", strerror(errno));
                 return EXIT_FAILURE;
             }
             logfd = tmp;
@@ -162,10 +169,7 @@ int main(int argc, char *argv[]) {
         return EXIT_FAILURE;
     }
 
-    uid = getuid();
-    gid = getgid();
-
-    if (chown(db_name, uid, gid)) {
+    if (chown(db_name, real_uid, real_gid)) {
         ERR("Cannot change DB ownership: %s", strerror(errno));
         return EXIT_FAILURE;
     }

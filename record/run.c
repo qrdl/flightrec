@@ -142,7 +142,7 @@ int record(char *params[]) {
             ERR("Cannot create named pipe: %s", strerror(errno));
             return FAILURE;
         }
-        if (chown(fifo_name, uid, gid)) {
+        if (chown(fifo_name, real_uid, real_gid)) {
             ERR("Cannot change pipe ownership: %s", strerror(errno));
             return EXIT_FAILURE;
         }
@@ -271,7 +271,7 @@ int record(char *params[]) {
         TIMER_STOP("Finishing");
     } else {
         /* child */
-        if (setuid(uid) || setgid(gid)) {
+        if (setuid(real_uid) || setgid(real_gid)) {
             ERR("Cannot set ownership for child process: %s", strerror(errno));
             exit(EXIT_FAILURE);
         }

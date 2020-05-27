@@ -176,7 +176,7 @@ void *wrk_insert_heap(void *arg) {
     if (DAB_OK != DAB_EXEC("PRAGMA synchronous=OFF")) {    // PRAGMA returns data we are not interested in
         return NULL;
     }
-    if (chown(local_db_name, uid, gid)) {
+    if (chown(local_db_name, real_uid, real_gid)) {
         ERR("Cannot change DB ownership: %s", strerror(errno));
         return NULL;
     }
@@ -310,7 +310,7 @@ void *wrk_insert_mem(void *arg) {
     if (DAB_OK != DAB_EXEC("PRAGMA synchronous=OFF")) {    // PRAGMA returns data we are not interested in
         return NULL;
     }
-    if (chown(local_db_name, uid, gid)) {
+    if (chown(local_db_name, real_uid, real_gid)) {
         ERR("Cannot change DB ownership: %s", strerror(errno));
         return NULL;
     }

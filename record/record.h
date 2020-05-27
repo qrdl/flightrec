@@ -80,7 +80,7 @@ extern char            *acceptable_path;
 extern struct entry    *ignore_unit;
 extern struct entry    *process_unit;
 extern int              unit_count;
-extern uid_t            uid;
-extern gid_t            gid;
+extern uid_t            real_uid;
+extern gid_t            real_gid;
 
 #endif
