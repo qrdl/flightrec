@@ -10,7 +10,7 @@
 #
 ##########################################################################
 #
-#  Copyright (C) 2017-2020 Ilya Caramishev (ilya@qrdl.com)
+#  Copyright (C) 2017-2020 Ilya Caramishev (flightrec@qrdl.com)
 #
 #  This program is free software: you can redistribute it and/or modify
 #  it under the terms of the GNU Affero General Public License as
@@ -38,7 +38,16 @@ $(SUBDIRS):
 tests:
 	$(MAKE) -C test run
 
+install:
+	sudo $(MAKE) -C record install
+	$(MAKE) -C vscode_extension install
+
+uninstall:
+	sudo $(MAKE) -C record uninstall
+	$(MAKE) -C vscode_extension uninstall
+
 clean:
 	rm -f fr_record fr_preload.so vscode_extension/fr_examine
 
-.PHONY: $(TOPTARGETS) $(SUBDIRS) tests
+.PHONY: $(TOPTARGETS) $(SUBDIRS) tests install uninstall
+

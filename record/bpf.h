@@ -1,10 +1,10 @@
 /**************************************************************************
  *
- *  File:       test.c
+ *  File:       bpf.h
  *
  *  Project:    Flight recorder (https://github.com/qrdl/flightrec)
  *
- *  Descr:      Managed strings library test and samples
+ *  Descr:      eBPF program tracing
  *
  *  Notes:
  *
@@ -26,36 +26,24 @@
  *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *
  **************************************************************************/
-#include <stdio.h>
-#include "stingray.h"
+#ifndef _BPF_H
+#define _BPF_H
 
-int main(void) {
-    sr_string str = sr_new("", 128);
-    sr_string str1 = sr_new("foo", 128);
-    STRCPY(str, str1);
-    printf("%s (%d)\n", CSTR(str), STRLEN(str));
-    STRNCAT(str, "bar", 2);
-    printf("%s (%d)\n", CSTR(str), STRLEN(str));
-    STRNCAT(str, str1, 10);
-    printf("%s (%d)\n", CSTR(str), STRLEN(str));
-    CONCAT(str, "text", 5, (char)'-', 100, str1, CSTR(str)[0], 3.141593);
-    printf("%s (%d)\n", CSTR(str), STRLEN(str));
+#include <stdint.h>
 
-    printf("%s\n", STRSTR(str, "text"));
-    printf("%s\n", STRSTR(str, str1));
-    printf("%s\n", STRSTR("affoooo", str1));
+#define BPF_EVT_PAGEFAULT   1
+#define BPF_EVT_MMAPENTRY   2
+#define BPF_EVT_MMAPEXIT    3
+#define BPF_EVT_MUNMAP      4
+#define BPF_EVT_BRK         5
+#define BPF_EVT_SIGNAL      6
 
-    printf("%s vs %s = %d\n", CSTR(str1), "foo", STRCMP(str1, "foo"));
-    printf("%s vs %s = %d\n", CSTR(str1), "z", STRCMP(str1, "z"));
-    printf("%s vs %s = %d\n", CSTR(str), CSTR(str1), STRCMP(str, str1));
+struct bpf_event {
+    uint64_t    type;
+    uint64_t    payload;
+};
 
-    printf("%s\n", STRCHR(str, 't'));
-    printf("%s\n", STRCHR(str1, 'o'));
-    printf("%s\n", STRRCHR("baar", 'a'));
+int bpf_start(pid_t pid, void (* callback)(void *, void *, int));
+void bpf_stop(void);
 
-    STRFREE(str);
-    STRFREE(str1);
-
-    return 0;
-}
-
+#endif

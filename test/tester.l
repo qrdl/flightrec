@@ -1,3 +1,33 @@
+%{
+ /*************************************************************************
+ *
+ *  File:       tester.l
+ *
+ *  Project:    Flight recorder (https://github.com/qrdl/flightrec)
+ *
+ *  Descr:      Lexer for tester tool
+ *
+ *  Notes:
+ *
+ **************************************************************************
+ *
+ *  Copyright (C) 2017-2020 Ilya Caramishev (flightrec@qrdl.com)
+ *
+ *  This program is free software: you can redistribute it and/or modify
+ *  it under the terms of the GNU Affero General Public License as
+ *  published by the Free Software Foundation, either version 3 of the
+ *  License, or (at your option) any later version.
+ *
+ *  This program is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU Affero General Public License for more details.
+ *
+ *  You should have received a copy of the GNU Affero General Public License
+ *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ *
+ **************************************************************************/
+%}
 S   [ \t\v\n\f]
 D	[0-9]
 E	[Ee][+-]?{D}+
@@ -9,7 +39,7 @@ E	[Ee][+-]?{D}+
 #include <string.h>
 
 #include "tester.h"
-#include "y.tab.h"
+#include "tester.tab.h"
 
 void yyerror(const char *s);
 

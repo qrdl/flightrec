@@ -10,7 +10,7 @@
  *
  **************************************************************************
  *
- *  Copyright (C) 2017-2020 Ilya Caramishev (ilya@qrdl.com)
+ *  Copyright (C) 2017-2020 Ilya Caramishev (flightrec@qrdl.com)
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU Affero General Public License as
@@ -94,7 +94,8 @@ int create_db(void) {
                                 "line           INTEGER NOT NULL, "
                                 "address        INTEGER NOT NULL, "
                                 "scope_id       INTEGER, "  // ref scope.id
-                                "function_id    INTEGER, "  // ref function.id. scope and function may not correspond for lines inside lexical blocks
+                                "function_id    INTEGER, "  // ref function.id. scope and function may not correspond
+                                                            // for lines inside lexical blocks
                                 "instr          INTEGER, "  // store original CPU instruction when setting breakpoint
                                 "func_flag      INTEGER"    // indicate that this line is the first line of the function
                             ")")) {
@@ -106,17 +107,6 @@ int create_db(void) {
                                 "name       VARCHAR(255) NOT NULL, "
                                 "offset     INTEGER NOT NULL, "
                                 "scope_id   INTEGER NOT NULL"      // ref scope.id
-                            ")")) {
-        return FAILURE;
-    }
-
-    if (DAB_OK != DAB_EXEC("CREATE TABLE step ("
-                                "id             INTEGER PRIMARY KEY AUTOINCREMENT, "
-                                "file_id        INTEGER NOT NULL, "     // ref file.id
-                                "line           INTEGER NOT NULL, "
-                                "depth          INTEGER, "
-                                "function_id    INTEGER, "              // ref function.id
-                                "regs           BLOB"
                             ")")) {
         return FAILURE;
     }
@@ -205,7 +195,7 @@ int alter_db(void) {
     if (DAB_OK != DAB_EXEC("UPDATE statement SET scope_id = "
             "(SELECT id FROM scope "
                 "WHERE "
-                    "statement.address < end_addr AND " // end address is in fact an address of next scope, so strict "less than"
+                    "statement.address < end_addr AND " // end addr is in fact an addr of next scope, so "less than"
                     "statement.address >= start_addr "
                     "order by depth DESC LIMIT 1"
             ")")) {
@@ -220,7 +210,7 @@ int alter_db(void) {
                 "WHERE "
                     "s.id = f.scope_id AND "
                     "statement.address >= s.start_addr AND "
-                    "statement.address < s.end_addr "   // end address is in fact an address of next scope, so strict "less than"
+                    "statement.address < s.end_addr "   // end addr is in fact an addr of next scope, so "less than"
             ")")) {
         return FAILURE;
     }
@@ -479,20 +469,6 @@ int prepare_statements(void) {
             "WHERE "
                 "unit_id = ? AND "
                 "offset = ?")) {
-        return FAILURE;
-    }
-
-    if (DAB_OK != DAB_CURSOR_PREPARE(&select_line, "SELECT "
-                    "file_id, "
-                    "line, "
-                    "instr, "
-                    "function_id, "
-                    "func_flag, "
-                    "scope_id "
-                "FROM "
-                    "statement "
-                "WHERE "
-                    "address = ?")) {
         return FAILURE;
     }
 

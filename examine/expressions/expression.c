@@ -10,7 +10,7 @@
  *
  **************************************************************************
  *
- *  Copyright (C) 2017-2020 Ilya Caramishev (ilya@qrdl.com)
+ *  Copyright (C) 2017-2020 Ilya Caramishev (flightrec@qrdl.com)
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU Affero General Public License as
@@ -694,7 +694,7 @@ union node_value var_value(struct ast_node *ast, uint64_t addr, uint64_t step, c
                 case sizeof(double):
                     ret.float_value = *(double *)value;
                     break;
-#if __SIZEOF_LONG_DOUBLE__ > __SIZEOF_DOUBLE__      // only when long double is longer than double - to avoid compile error with equal cases
+#if __SIZEOF_LONG_DOUBLE__ > __SIZEOF_DOUBLE__      // to avoid compile error with equal cases
                 case __SIZEOF_LONG_DOUBLE__:
                     ret.float_value = (double)*(long double *)value;    // loosing precision here!
                     break;

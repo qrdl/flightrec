@@ -1,6 +1,6 @@
 /**************************************************************************
  *
- *  File:       workers.c
+ *  File:       db_workers.c
  *
  *  Project:    Flight recorder (https://github.com/qrdl/flightrec)
  *
@@ -8,14 +8,14 @@
  *
  *  Notes:      SQLite WAL mode results in locking when trying to run several
  *              transactions from different threads in parallel, even on
- *              different tables, therefore I have to use temporary in-memory
+ *              different tables, therefore I have to use temporary
  *              DB. However when support for WAL2 journalling mode and BEGIN
  *              CONCURRENT is finally merged into SQLite trunk it may give
- *              better result then using temporary in-memory DB
+ *              better result then using temporary DB
  *
  **************************************************************************
  *
- *  Copyright (C) 2017-2020 Ilya Caramishev (ilya@qrdl.com)
+ *  Copyright (C) 2017-2020 Ilya Caramishev (flightrec@qrdl.com)
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU Affero General Public License as
@@ -31,12 +31,18 @@
  *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *
  **************************************************************************/
+#include <stdio.h>
+#include <string.h>
+#include <errno.h>
+#include <unistd.h>
+
 #include "stingray.h"
 #include "dab.h"
 
 #include "flightrec.h"
+#include "record.h"
 #include "channel.h"
-#include "workers.h"
+#include "db_workers.h"
 #include "eel.h"
 
 /* According to my measurments 4096 gives better performance than 2048 and 8192 */
@@ -61,14 +67,31 @@ void *wrk_insert_step(void *arg) {
     void *insert;
     size_t counter = 0;
 
-    if (DAB_OK != DAB_OPEN(db_name, DAB_FLAG_NONE)) {     // already in multi-threaded mode
+    if (DAB_OK != DAB_OPEN(db_name, DAB_FLAG_CREATE)) {
+        return NULL;
+    }
+    if (DAB_UNEXPECTED != DAB_EXEC("PRAGMA journal_mode=OFF")) {    // PRAGMA returns data we are not interested in
+        return NULL;
+    }
+    if (DAB_OK != DAB_EXEC("PRAGMA synchronous=OFF")) {    // PRAGMA returns data we are not interested in
         return NULL;
     }
 
+    if (DAB_OK != DAB_EXEC("CREATE TABLE step ("
+                                "id             INTEGER PRIMARY KEY AUTOINCREMENT, "
+                                "address        INTEGER NOT NULL, "
+                                "depth          INTEGER, "
+                                "function_id    INTEGER, "     // ref function.id
+                                "regs           BLOB"
+                            ")")) {
+        return NULL;
+    }
+
+    /* file_id and line are filled later, from address */
     if (DAB_OK != DAB_CURSOR_PREPARE(&insert, "INSERT "
                     "INTO step "
-                    "(id, file_id, line, depth, function_id, regs) VALUES "
-                    "(?,  ?,       ?,    ?,     ?,           ?)")) {
+                    "(id, address, depth, function_id, regs) VALUES "
+                    "(?,  ?,       ?,     ?,           ?)")) {
         return NULL;
     }
 
@@ -78,16 +101,17 @@ void *wrk_insert_step(void *arg) {
         return NULL;
     }
     struct sr registers;
-    while (CHANNEL_OK == ch_read(ch, (char **)&msg, &size)) {
-        DAB_CURSOR_RESET(insert);
+    while (CHANNEL_OK == ch_read(ch, (char **)&msg, &size, READ_BLOCK)) {
+        if (DAB_OK != DAB_CURSOR_RESET(insert)) {
+            DAB_ROLLBACK;
+            return NULL;
+        }
         /* manualy assemble Stingray string to be used as BLOB */
         registers.val = (char *)&msg->regs;
         registers.size = registers.len = sizeof(msg->regs);
-
         if (DAB_OK != DAB_CURSOR_BIND(insert,
                 msg->step_id,
-                msg->file_id,
-                msg->line,
+                msg->address,
                 msg->depth,
                 msg->func_id,
                 &registers)) {
@@ -115,8 +139,8 @@ void *wrk_insert_step(void *arg) {
         DAB_ROLLBACK;
         return NULL;
     }
-
     DAB_CURSOR_FREE(insert);
+
     DAB_CLOSE(DAB_FLAG_NONE);
 
     return (void*)1;    // non-NULL means success
@@ -139,7 +163,21 @@ void *wrk_insert_heap(void *arg) {
     void *insert, *update;
     size_t counter = 0;
 
-    if (DAB_OK != DAB_OPEN(":memory:", DAB_FLAG_NONE)) {     // already in multi-threaded mode
+    char *local_db_name = malloc(strlen(db_name) + sizeof("_heap"));
+    strcpy(local_db_name, db_name);
+    strcat(local_db_name, "_heap");
+
+    if (DAB_OK != DAB_OPEN(local_db_name, DAB_FLAG_CREATE)) {
+        return NULL;
+    }
+    if (DAB_UNEXPECTED != DAB_EXEC("PRAGMA journal_mode=OFF")) {    // PRAGMA returns data we are not interested in
+        return NULL;
+    }
+    if (DAB_OK != DAB_EXEC("PRAGMA synchronous=OFF")) {    // PRAGMA returns data we are not interested in
+        return NULL;
+    }
+    if (chown(local_db_name, real_uid, real_gid)) {
+        ERR("Cannot change DB ownership: %s", strerror(errno));
         return NULL;
     }
 
@@ -173,9 +211,12 @@ void *wrk_insert_heap(void *arg) {
     if (DAB_OK != DAB_BEGIN) {
         return NULL;
     }
-    while (CHANNEL_OK == ch_read(ch, (char **)&msg, &size)) {
+    while (CHANNEL_OK == ch_read(ch, (char **)&msg, &size, READ_BLOCK)) {
         if (msg->size) {
-            DAB_CURSOR_RESET(insert);
+            if (DAB_OK != DAB_CURSOR_RESET(insert)) {
+                DAB_ROLLBACK;
+                return NULL;
+            }
             if (DAB_OK != DAB_CURSOR_BIND(insert,
                     msg->address,
                     msg->size,
@@ -187,9 +228,9 @@ void *wrk_insert_heap(void *arg) {
                 DAB_ROLLBACK;
                 return NULL;
             }
-        } else {
-            DAB_CURSOR_RESET(update);
-            if (DAB_OK != DAB_CURSOR_BIND(update,
+        } else {            
+            if (DAB_OK != DAB_CURSOR_RESET(update) ||
+                DAB_OK != DAB_CURSOR_BIND(update,
                     msg->step_id,
                     msg->address)) {
                 DAB_ROLLBACK;
@@ -232,6 +273,9 @@ void *wrk_insert_heap(void *arg) {
     }
 
     DAB_CLOSE(DAB_FLAG_NONE);
+    if (remove(local_db_name)) {
+        ERR("Cannot remove temporary DB: %s", strerror(errno));
+    }
 
     return (void*)1;    // non-NULL means success
 }
@@ -253,7 +297,21 @@ void *wrk_insert_mem(void *arg) {
     void *insert;
     size_t counter = 0;
 
-    if (DAB_OK != DAB_OPEN(":memory:", DAB_FLAG_NONE)) {     // already in multi-threaded mode
+    char *local_db_name = malloc(strlen(db_name) + sizeof("_mem"));
+    strcpy(local_db_name, db_name);
+    strcat(local_db_name, "_mem");
+
+    if (DAB_OK != DAB_OPEN(local_db_name, DAB_FLAG_CREATE)) {
+        return NULL;
+    }
+    if (DAB_UNEXPECTED != DAB_EXEC("PRAGMA journal_mode=OFF")) {    // PRAGMA returns data we are not interested in
+        return NULL;
+    }
+    if (DAB_OK != DAB_EXEC("PRAGMA synchronous=OFF")) {    // PRAGMA returns data we are not interested in
+        return NULL;
+    }
+    if (chown(local_db_name, real_uid, real_gid)) {
+        ERR("Cannot change DB ownership: %s", strerror(errno));
         return NULL;
     }
 
@@ -278,12 +336,14 @@ void *wrk_insert_mem(void *arg) {
         return NULL;
     }
     struct sr content;
-    while (CHANNEL_OK == ch_read(ch, (char **)&msg, &size)) {
-        DAB_CURSOR_RESET(insert);
+    while (CHANNEL_OK == ch_read(ch, (char **)&msg, &size, READ_BLOCK)) {
+        if (DAB_OK != DAB_CURSOR_RESET(insert)) {
+            DAB_ROLLBACK;
+            return NULL;
+        }
         /* manualy assemble Stingray string to be used as BLOB */
         content.val = msg->content;
         content.size = content.len = sizeof(msg->content);
-
         if (DAB_OK != DAB_CURSOR_BIND(insert,
                 msg->address,
                 msg->step_id,
@@ -329,6 +389,9 @@ void *wrk_insert_mem(void *arg) {
     }
 
     DAB_CLOSE(DAB_FLAG_NONE);
+    if (remove(local_db_name)) {
+        ERR("Cannot remove temporary DB: %s", strerror(errno));
+    }
 
     return (void*)1;    // non-NULL means success
 }

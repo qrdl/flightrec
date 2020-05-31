@@ -23,20 +23,20 @@ Flightrec was tested only on x86-64 architecture, however it should be possible 
 ### OS
 Flightrec supports only 64-bit Linux and it uses some Linux-specific (non-POSIX) APIs for monitoring memory. There are no plans to support other OSes.
 
-Linux kernel must have `CONFIG_PROC_PAGE_MONITOR` switched on to generate `/proc/<pid>/pagemap` file, which is default for most distribuition, but not for WLS (Windows Subsystem for Linux), therefore Flightrec doesn't work under WSL.
+Linux kernel must have `CONFIG_PROC_PAGE_MONITOR` switched on to generate `/proc/<pid>/clear_refs` file, which is default for most distribution, but not for WLS (Windows Subsystem for Linux), therefore Flightrec doesn't work under WSL. Also Linux kernel must support eBPF (standard for all recent kernel versions).
 
 ### Languages and compilers
 For now Flightrec supports only client binaries, compiled from C using GCC compiler. There are plans to support other compilers and languages, and there were some encouraging tests with Go using native Go compiler.
 
 ### Debug info format
-Flightrec supports only ELF client binaries with DWARF2 debug information. There are plans to support DWARF4/5 debug formats as well.
+Flightrec supports only ELF client binaries with DWARF2 debug information, therefore it is important to compile traced programs with `-gdwarf2` option. There are plans to support DWARF4/5 debug formats as well.
 
 ### Optimisation
 With high optimisation settings GCC may create complex locations for variables, such as "first 8 bytes in register, reminder in memory at certain address", and it is not supported by Flightrec.
 Therefore is recommended to compile client without optimisation.
 
 ### Memory management
-Flightrec intercepts calls to `malloc`/`free` family of functions in order to monitor memory changes, therefore if client uses its own memory management by directly doing syscalls, Flightrec is unable to detect it.
+Flightrec intercepts calls to `malloc`/`free` family of functions in order to monitor memory changes, therefore if child process uses custom memory management, it can interfere with Flightrec's logic.
 
 ### Threads
 Although Flightrec is multi-threaded application, it doesn't support multi-threaded clients, it means that only main thread of the client is analysed. There are plans to support multi-threaded clients in the future.
@@ -53,7 +53,8 @@ Also following libraries are required (with Ubuntu package names, other distribu
 * libelf (`libelf-dev`)
 * libdwarf (`libdwarf-dev`)
 * sqlite3 (`libsqlite3-dev`)
-* json-c (`libjson-c-dev`) version 1.13 or above (versions below 1.13 aren't compatible with Flightrec)
+* json-c (`libjson-c-dev`) version 0.13 or above (versions below 0.13 aren't compatible with Flightrec)
+* libbpf (`libbpfcc-dev`)
 
 ### VSCode extension
 To package VSCode extension you need to have [Node.js](https://nodejs.org/) installed, with [vsce](https://github.com/microsoft/vscode-vsce).
@@ -63,9 +64,8 @@ To install `vsce` run `npm install vsce`.
 To build Flightrec run `make` in Flightrec's root directory. Binaries `fr_record`, `fr_preload.so` will be copied into Flightrec's root directory. VSCode debugging extension will be created in `vscode_extension` directory.
 
 ## Installing
-Run `make install` in `vscode_extension` directory or manually install Flightrec extension in VS Code by selecting `Install from VSIX...` menu option in `Extensions` tab.
+Run `make install` in Flightrec's root directory. Please note that installing Flightrec Recorder requires root access due to the fact that `fr_record` binary runs as `root` because otherwise it cannot load eBPF program inside Linux kernel (eBPF is used to detect memory changes and certain memory-related syscalls, such as `memmap` and `brk`).
 
-NB! Binaries `fr_record` and `fr_preload.so` can be placed into any directory, but it is important to keep them in the same directory.
 
 ## Recording run
 
@@ -75,7 +75,7 @@ Client program to be analysed by Flightrec must be built with DWARF2 debug infor
 ### Processing
 Run `fr_record [<options>] -- <client> [<client options>]` to record the run. As a result Flightrec creates file with name of client and `fr` extension, this file is used later by Examine.
 
-Run under Recorder is much slower than regular run, therefore it is recommended to limit the number of recorded steps. To do it some translation units can be excluded from analysis, as a result user won't be able to step inside the calls for functions, located in these units. For example if program is directly linked with SQlite3 (not as external library), it can be excluded with `-x sqlite3.c` option. `-x` option specifies units to exclude (blacklist), while `-i` option specifies units in to include (whitelist). If whitelist is specified, blacklist is ignored. Both `-x` and `-i` options can occur several times.
+Run under Recorder is much slower than regular run, therefore it is recommended to limit the number of recorded steps. To do it some translation units can be excluded from analysis, as a result user won't be able to step inside the calls for functions, located in these units. For example if program is directly linked with SQLite3 (not as external library), it can be excluded with `-x sqlite3.c` option. `-x` option specifies units to exclude (blacklist), while `-i` option specifies units in to include (whitelist). If whitelist is specified, blacklist is ignored. Both `-x` and `-i` options can occur several times.
 
 Units, compiled without debug information, excluded from analysis automatically.
 

@@ -9,10 +9,10 @@ examine/cmd_hash.c
 *.fr-shm
 *.fr-wal
 .vscode/settings.json
-core
+core.*
 *.log
 test/tester
-y.tab.c
-y.tab.h
+*.tab.c
+*.tab.h
 lex.yy.c
 libexpr.a

@@ -6,12 +6,12 @@
  *
  *  Descr:      Common definitions
  *
- *  Notes:      Memeory-related definitions and functions, used mostly by
+ *  Notes:      Memory-related definitions and functions, used mostly by
  *              'record' component
  *
  **************************************************************************
  *
- *  Copyright (C) 2017-2020 Ilya Caramishev (ilya@qrdl.com)
+ *  Copyright (C) 2017-2020 Ilya Caramishev (flightrec@qrdl.com)
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU Affero General Public License as
@@ -45,23 +45,6 @@ struct heap_event {
     uint64_t    address;
     uint64_t    size;
 };
-
-/* this struct is used for passing args to mem_process_region() */
-struct region_proc_args {
-    uint64_t    start;
-    uint64_t    end;
-    uint64_t    step_id;
-};
-
-/* child process memory operations */
-int mem_init(pid_t pid);
-int mem_read_regions(void);
-int mem_first_region(uint64_t *start, uint64_t *end);
-int mem_next_region(uint64_t *start, uint64_t *end);
-int mem_process_region(uint64_t start, uint64_t end, uint64_t step_id, int force);
-int mem_in_cache(uint64_t address, uint64_t size);
-int mem_reset_dirty(void);
-int get_base_address(pid_t p, uint64_t *offset);
 
 /* function returns pointer to function with fastest implementation based on instruction set and buffer size */
 int (* best_memdiff(size_t count))(const char *, const char *, size_t);

@@ -1,6 +1,6 @@
 /**************************************************************************
  *
- *  File:       workers.h
+ *  File:      db_ workers.h
  *
  *  Project:    Flight recorder (https://github.com/qrdl/flightrec)
  *
@@ -10,7 +10,7 @@
  *
  **************************************************************************
  *
- *  Copyright (C) 2017-2020 Ilya Caramishev (ilya@qrdl.com)
+ *  Copyright (C) 2017-2020 Ilya Caramishev (flightrec@qrdl.com)
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU Affero General Public License as
@@ -26,8 +26,8 @@
  *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *
  **************************************************************************/
-#ifndef _WORKERS_H
-#define _WORKERS_H
+#ifndef _DB_WORKERS_H
+#define _DB_WORKERS_H
 
 #include <sys/user.h>   // for struct user_regs_struct
 
@@ -36,7 +36,7 @@
 #include "mem.h"        // for MEM_SEGMENT_SIZE
 
 // cannot wrap into do {...} while(0) because have to declare some variables
-#define START_WORKER(A) \
+#define START_DB_WORKER(A) \
         insert_ ## A ## _ch = ch_create(); \
         if (!insert_ ## A ## _ch) { \
             return FAILURE; \
@@ -45,8 +45,10 @@
         if (0 != pthread_create(&insert_ ## A ## _worker, NULL, wrk_insert_ ## A, insert_ ## A ## _ch)) { \
             ERR("Cannot start insert " #A " worker thread: %s", strerror(errno)); \
             return FAILURE; \
+        } else { \
+            pthread_setname_np(insert_ ## A ## _worker, "fr_db_" #A); \
         }
-#define WAIT_WORKER(A) do { \
+#define WAIT_DB_WORKER(A) do { \
         ch_finish(insert_ ## A ## _ch); \
         void *res; \
         if (0 != pthread_join(insert_ ## A ## _worker, &res)) { \
@@ -62,10 +64,9 @@
 
 struct insert_step_msg {
     ULONG                       step_id;
-    ULONG                       file_id;
-    ULONG                       line;
     ULONG                       depth;
     ULONG                       func_id;
+    ULONG                       address;
     struct user_regs_struct     regs;
 };
 
@@ -84,5 +85,7 @@ struct insert_mem_msg {
 void *wrk_insert_step(void *arg);
 void *wrk_insert_heap(void *arg);
 void *wrk_insert_mem(void *arg);
+
+extern struct channel *insert_mem_ch;      // defined in run.c
 
 #endif
