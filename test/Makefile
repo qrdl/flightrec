@@ -4,7 +4,7 @@
 #
 #  Project:    	Flight recorder (https://github.com/qrdl/flightrec)
 #
-#  Descr:      	Tester, tast programs and automated tests
+#  Descr:      	Test programs and test suite
 #
 #  Notes:
 #
@@ -28,17 +28,14 @@
 ##########################################################################
 CFLAGS := -g3 -gdwarf-2 -O0
 
-.PHONY : all run
+.PHONY : all run clean
 
-##### test binaries
+TESTBINS = test1 test2 test3 test4 test5 test6
 
-TESTBINS = test1 test2 test3 test4 test5
+all: $(TESTBINS)
 
-all: $(TESTBINS) tester
-
-run: tester
 run: ${TESTBINS:%=%.fr}
-	./tester -v path="$(shell pwd)" *.test
+	../tester/tester -v path="$(shell pwd)" *.test
 
 %.fr: %
 	fr_record -l test.log -- ./$^
@@ -47,23 +44,6 @@ run: ${TESTBINS:%=%.fr}
 $(TESTBINS): $$(addsuffix *.c,$$@)
 	$(CC) $(CFLAGS) -o $@ $^
 
-##### tester
-
-tester: tester.tab.o lex.yy.o tester_func.o ../jsonapi/jsonapi.o
-	$(CC) -o $@ $^ -lfl -ljson-c -lm
-
-lex.yy.o: tester.l tester.tab.h tester.h
-	flex tester.l
-	$(CC) -I../jsonapi -g -c -o $@ lex.yy.c
-
-tester.tab.o: tester.y tester.h Makefile
-	bison -d tester.y
-#	bison -d -t tester.y
-	$(CC) -I../jsonapi -g -c -o $@ tester.tab.c
-
-tester_func.o: tester_func.c tester.h
-	$(CC) -I../jsonapi -g -c -o $@ tester_func.c -I..
-
 clean:
-	rm -f $(TESTBINS) *.o *.fr* test.log tester lex.yy.c tester.tab.c tester.tab.h core.*
+	rm -f $(TESTBINS) *.o *.fr* test.log core.*
 

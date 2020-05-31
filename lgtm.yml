@@ -22,4 +22,4 @@ extraction:
         - $GNU_MAKE -C jsonapi
         - $GNU_MAKE -C record
         - $GNU_MAKE -C examine
-        - $GNU_MAKE -C test tester
+        - $GNU_MAKE -C tester

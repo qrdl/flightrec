@@ -36,6 +36,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <signal.h>
+#include <regex.h>
 
 #include <jsonapi.h>
 
@@ -445,7 +446,32 @@ char **chop(char *source) {
 	return vector;
 }
 
-/* TODO pattern matching */
+
+/**************************************************************************
+ *
+ *  Function:   match
+ *
+ *  Params:     string - string to match
+ *              pattern - pattern to match to
+ *
+ *  Return:     1 (matched) / 0 (non-mathced) / -1 (error)
+ *
+ *  Descr:      Check if string match the pattern
+ *
+ **************************************************************************/
 int match(const char *string, const char *pattern) {
-    return 1;
+    regex_t compiled;
+
+    int ret = regcomp(&compiled, pattern, REG_NOSUB);
+    if (ret) {
+        char msg[256];
+        regerror(ret, &compiled, msg, sizeof(msg));
+        fprintf(stderr, "Cannot compile regex: %s\n", msg);
+        return -1;
+    }
+
+    ret = regexec(&compiled, string, 0, NULL, 0);
+    regfree(&compiled);
+
+    return !ret;
 }

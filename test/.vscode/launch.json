@@ -8,7 +8,7 @@
             "name": "Flight Recorder: Attach",
             "type": "flightrec",
             "request": "launch",
-            "program": "${workspaceFolder}/test4",
+            "program": "${workspaceFolder}/test6",
             "sourcePath": "${workspaceFolder}",
             "stopOnEntry": true,
             "debugServer": 1337
@@ -17,8 +17,8 @@
             "name": "Flight Recorder: Launch",
             "type": "flightrec",
             "request": "launch",
-            "program": "${workspaceFolder}/test1",
-            "collectedData": "${workspaceFolder}/test1.fr",
+            "program": "${workspaceFolder}/test6",
+            "collectedData": "${workspaceFolder}/test6.fr",
             "sourcePath": "${workspaceFolder}",
             "stopOnEntry": true
         }

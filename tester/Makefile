@@ -4,7 +4,7 @@
 #
 #  Project:    	Flight recorder (https://github.com/qrdl/flightrec)
 #
-#  Descr:      	Main makefile
+#  Descr:      	Tester for test suite
 #
 #  Notes:
 #
@@ -26,28 +26,25 @@
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #
 ##########################################################################
-TOPTARGETS = all clean
+.PHONY : all clean
 
-SUBDIRS = dab stingray jsonapi record examine vscode_extension tester test
+all: tester
 
-$(TOPTARGETS): $(SUBDIRS)
+tester: tester.tab.o lex.yy.o tester_func.o ../jsonapi/jsonapi.o
+	$(CC) -o $@ $^ -lfl -ljson-c -lm
 
-$(SUBDIRS):
-	$(MAKE) -C $@ $(MAKECMDGOALS)
+lex.yy.o: tester.l tester.tab.h tester.h
+	flex tester.l
+	$(CC) -I../jsonapi -g -c -o $@ lex.yy.c
 
-tests:
-	$(MAKE) -C test run
+tester.tab.o: tester.y tester.h Makefile
+	bison -d tester.y
+#	bison -d -t tester.y
+	$(CC) -I../jsonapi -g -c -o $@ tester.tab.c
 
-install:
-	sudo $(MAKE) -C record install
-	$(MAKE) -C vscode_extension install
-
-uninstall:
-	sudo $(MAKE) -C record uninstall
-	$(MAKE) -C vscode_extension uninstall
+tester_func.o: tester_func.c tester.h
+	$(CC) -I../jsonapi -g -c -o $@ tester_func.c -I..
 
 clean:
-	rm -f fr_record fr_preload.so vscode_extension/fr_examine
-
-.PHONY: $(TOPTARGETS) $(SUBDIRS) tests install uninstall
+	rm -f *.o *.fr* tester lex.yy.c tester.tab.c tester.tab.h
 
