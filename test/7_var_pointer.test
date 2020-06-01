@@ -421,7 +421,7 @@ case "Overwrite value of char pointer" {
     }
 }
 
-case "Overwrite 0-terminator (string not longer 0-terminated)" {
+case "Overwrite 0-terminator (string no longer 0-terminated)" {
     request '{"command":"next","arguments":{"threadId":1},"type":"request","seq":44}'
     response {
         # ignore response
@@ -470,6 +470,90 @@ case "Function pointer - alias for main" {
         expect /body/variables[2]/name == func
         expect /body/variables[2]/variablesReference == 0
         expect /body/variables[2]/value =~ "0x[0-9a-f]* <main>"
+    }
+}
+
+case "Pointer points to invalid location" {
+    request '{"command":"next","arguments":{"threadId":1},"type":"request","seq":50}'
+    response {
+        # ignore response
+    }
+    response {
+        # ignore stop event
+    }
+    request '{"command":"stackTrace","arguments":{"threadId":1,"startFrame":0,"levels":20},"type":"request","seq":51}'
+    response {
+        # ignore response
+    }
+    request '{"command":"variables","arguments":{"variablesReference":$(global_scope) },"type":"request","seq":52}'
+    response {
+        expect /type == "response"
+        expect /command == variables
+        expect /request_seq == 52
+        expect /success == true
+        expect LENGTH(/body/variables) == 4
+
+        expect /body/variables[0]/name == gint
+        expect /body/variables[0]/value =~ "0x[0-9a-f]* (invalid)"
+    }
+}
+
+case "Double pointer (pointer to pointer)" {
+    request '{"command":"next","arguments":{"threadId":1},"type":"request","seq":53}'
+    response {
+        # ignore response
+    }
+    response {
+        # ignore stop event
+    }
+    request '{"command":"next","arguments":{"threadId":1},"type":"request","seq":54}'
+    response {
+        # ignore response
+    }
+    response {
+        # ignore stop event
+    }
+    request '{"command":"stackTrace","arguments":{"threadId":1,"startFrame":0,"levels":20},"type":"request","seq":55}'
+    response {
+        # ignore response
+    }
+    request '{"command":"variables","arguments":{"variablesReference":$(local_scope) },"type":"request","seq":56}'
+    response {
+        expect /type == "response"
+        expect /command == variables
+        expect /request_seq == 56
+        expect /success == true
+        expect LENGTH(/body/variables) == 4
+
+        expect /body/variables[3]/name == ppint
+        expect /body/variables[3]/value =~ "(int\*\*)0x[0-9a-f]*"
+        expect /body/variables[3]/indexedVariables == 1
+        set ppint_ref = /body/variables[3]/variablesReference
+    }
+    request '{"command":"variables","arguments":{"variablesReference":$(ppint_ref), "filter":"indexed", "start": 0, "count": 1 },"type":"request","seq":57}'
+    response {
+        expect /type == "response"
+        expect /command == variables
+        expect /request_seq == 57
+        expect /success == true
+        expect LENGTH(/body/variables) == 1
+
+        expect /body/variables[0]/name == "[0]"
+        expect /body/variables[0]/value =~ "(int\*)0x[0-9a-f]*"
+        expect /body/variables[0]/indexedVariables == 1
+        set ppint_ref = /body/variables[0]/variablesReference
+    }
+    request '{"command":"variables","arguments":{"variablesReference":$(ppint_ref), "filter":"indexed", "start": 0, "count": 1 },"type":"request","seq":58}'
+    response {
+        expect /type == "response"
+        expect /command == variables
+        expect /request_seq == 58
+        expect /success == true
+        expect LENGTH(/body/variables) == 1
+
+        expect /body/variables[0]/name == "[0]"
+        expect /body/variables[0]/value == 42
+        expect /body/variables[0]/variablesReference == 0
     }
 }
 

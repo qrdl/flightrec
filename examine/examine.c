@@ -72,10 +72,17 @@ int main(int argc, char *argv[]) {
     char *port = NULL;
     logfd = stderr;
 
-    while ((c = getopt(argc, argv, "p:")) != -1) {
+    while ((c = getopt(argc, argv, "p:l:")) != -1) {
         switch (c) {
             case 'p':
                 port = optarg;
+                break;
+            case 'l':
+                logfd = fopen(optarg, "w");
+                if (!logfd) {
+                    printf("Cannot open logfile: %s\n", strerror(errno));
+                    return FAILURE;
+                }
                 break;
             default:
                 if ('p' == optopt) {

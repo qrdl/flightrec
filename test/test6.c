@@ -27,5 +27,9 @@ int main(void) {
 
     int (* func)(void) = main;
 
+    gint = (int *)0x10;
+    gint = &foo;
+    int **ppint = &gint;
+
     return 0;
 }

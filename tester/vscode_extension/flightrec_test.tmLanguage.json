@@ -24,7 +24,7 @@
 			"patterns": [
 				{
                     "name": "variable.flightrec_test",
-                    "match": "(\\\\$\\\\([^)]*\\\\))"
+                    "match": "(\\$\\([^)]*\\))"
 				}
 			]
 		},
@@ -35,7 +35,7 @@
 			"patterns": [
 				{
                     "name": "variable.flightrec_test",
-                    "match": "(\\\\$\\\\([^)]*\\\\))"
+                    "match": "(\\$\\([^)]*\\))"
 				}
 			]
 		},
@@ -53,7 +53,7 @@
 		"punctuation": {
 			"patterns": [{
 				"name": "keyword.control.flightrec_test",
-				"match": "({|}|/|\\[|\\]|==|!=|=~|!~|\\(|\\))"
+				"match": "({|}|/|\\[|\\]|=|==|!=|=~|!~|\\(|\\))"
 			}]
 		},
 		"variables": {

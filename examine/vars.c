@@ -53,7 +53,8 @@ void *member_cursor;
 void *mem_cursor;
 void *type_cursor;
 void *ref_cursor;
-void *ref_upsert;
+void *ref_insert;
+void *ref_update;
 void *heap_cursor;
 void *func_cursor;
 void *type_name_cursor;
@@ -957,20 +958,23 @@ int get_var_ref(int parent_type, ULONG parent, const char *child, ULONG address,
         )) {
             return FAILURE;
         }
-        /* unlike 'INSERT OR REPLACE', 'ON CONFLICT DO UPDATE' doesn't delete the existing record so 'id' remains */
-        if (DAB_OK != DAB_CURSOR_PREPARE(&ref_upsert, "INSERT INTO local.ref "
+        if (DAB_OK != DAB_CURSOR_PREPARE(&ref_insert, "INSERT INTO local.ref "
                 "(parent_type, parent, child, address, type, indirect) "
                 "VALUES "
-                "(?,           ?,      ?,     ?,       ?,    ?) "
-                "ON CONFLICT (parent_type, parent, child) "
-                    "DO UPDATE SET "
-                        "address = excluded.address, "
-                        "type = excluded.type, "
-                        "indirect = excluded.indirect"
+                "(?,           ?,      ?,     ?,       ?,    ?)"
         )) {
             return FAILURE;
         }
-        /* cannot use last inserted ID in case of UPSERT */
+        if (DAB_OK != DAB_CURSOR_PREPARE(&ref_update, "UPDATE local.ref "
+                "SET "
+                    "address = ?, "
+                    "type = ?, "
+                    "indirect = ? "
+                "WHERE "
+                    "id = ?"
+        )) {
+            return FAILURE;
+        }
         if (DAB_OK != DAB_CURSOR_PREPARE(&ref_cursor, "SELECT id FROM local.ref "
                 "WHERE "
                     "parent_type = ? AND "
@@ -979,15 +983,31 @@ int get_var_ref(int parent_type, ULONG parent, const char *child, ULONG address,
         )) {
             return FAILURE;
         }
-    } else if ( DAB_OK != DAB_CURSOR_RESET(ref_upsert) ||
-                DAB_OK != DAB_CURSOR_RESET(ref_cursor)) {
+    } else if (DAB_OK != DAB_CURSOR_RESET(ref_cursor)) {
         return FAILURE;
     }
 
-    if (    DAB_OK != DAB_CURSOR_BIND(ref_upsert, parent_type, parent, child, address, type, indirect) ||
-            DAB_NO_DATA != DAB_CURSOR_FETCH(ref_upsert) ||
-            DAB_OK != DAB_CURSOR_BIND(ref_cursor, parent_type, parent, child) ||
-            DAB_OK != DAB_CURSOR_FETCH(ref_cursor, ref)) {
+    if (DAB_OK != DAB_CURSOR_BIND(ref_cursor, parent_type, parent, child)) {
+        return FAILURE;
+    }
+
+    int ret = DAB_CURSOR_FETCH(ref_cursor, ref);
+    if (DAB_OK == ret) {
+        /* update existing record */
+        if (    DAB_OK != DAB_CURSOR_RESET(ref_update) ||
+                DAB_OK != DAB_CURSOR_BIND(ref_update, address, type, indirect, *ref) ||
+                DAB_NO_DATA != DAB_CURSOR_FETCH(ref_update)) {
+            return FAILURE;
+        }
+    } else if (DAB_NO_DATA == ret) {
+        /* insert new record */
+        if (    DAB_OK != DAB_CURSOR_RESET(ref_insert) ||
+                DAB_OK != DAB_CURSOR_BIND(ref_insert, parent_type, parent, child, address, type, indirect) ||
+                DAB_NO_DATA != DAB_CURSOR_FETCH(ref_insert)) {
+            return FAILURE;
+        }
+        *ref = DAB_LAST_ID;
+    } else {
         return FAILURE;
     }
 
@@ -1035,15 +1055,19 @@ int get_pointer_size(ULONG address, ULONG *size) {
         if (freed_at && freed_at <= cur_step) {
             return MEM_RELEASED;    // memory was released, address doesn't point to allocated memory
         }
-        return SUCCESS;
     } else {
-        /* TODO: check if memory really belongs to the process - require storing memory map in DB */
-        /* TODO: find the real variable the address belongs to, and find real size */
-        *size = 0;
-        return SUCCESS;
+        /* check if memory really belongs to the process */
+        if (    DAB_OK != DAB_CURSOR_RESET(mem_cursor) ||
+                DAB_OK != DAB_CURSOR_BIND(mem_cursor, cur_step, address+MEM_SEGMENT_SIZE, address)) {
+            return FAILURE;
+        }
+        if (DAB_NO_DATA == DAB_CURSOR_FETCH(mem_cursor)) {
+            return MEM_NOTFOUND;
+        }
+        *size = 0;       // address points to some valid location, but underlying var size isn't known
     }
 
-    return MEM_NOTFOUND;
+    return SUCCESS;
 }
 
 
