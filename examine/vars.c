@@ -714,7 +714,7 @@ int add_var_entry(JSON_OBJ *container, int parent_type, ULONG parent, char *name
                 /* check parent base type */
                 if (    DAB_OK != DAB_CURSOR_RESET(type_cursor) ||
                         DAB_OK != DAB_CURSOR_BIND(type_cursor, base_type) ||
-                        DAB_OK != DAB_CURSOR_FETCH(type_cursor, &size, &dummy, &flags, &base_type)) {
+                        DAB_OK != DAB_CURSOR_FETCH(type_cursor, &size, &dummy, &flags)) {   // don't fetch parent type
                     RETCLEAN(FAILURE);
                 }
             }
@@ -768,15 +768,22 @@ int add_var_entry(JSON_OBJ *container, int parent_type, ULONG parent, char *name
                 free(value);
                 RETCLEAN(SUCCESS);
             }
-
-            if (SUCCESS != get_var_ref(parent_type, parent, name, addr, type, indirect, &ref)) {
-                RETCLEAN(FAILURE);
+            /* for non-array pointer to struct/union add reference not to first (and only) item, but to struct itself */
+            if (dim == 1 && (TKIND_STRUCT == (flags & TKIND_TYPE) || TKIND_UNION == (flags & TKIND_TYPE))) {
+                if (SUCCESS != get_var_ref(parent_type, parent, name, addr, base_type, indirect, &ref)) {
+                    RETCLEAN(FAILURE);
+                }
+            } else {
+                if (SUCCESS != get_var_ref(parent_type, parent, name, addr, type, indirect, &ref)) {
+                    RETCLEAN(FAILURE);
+                }
+                JSON_NEW_INT64_FIELD(item, "indexedVariables", dim);
             }
+            
             if (!value_added) {      // add value with type, if not added by pointer code above
                 JSON_NEW_STRING_FIELD(item, "value", CSTR(tname));
             }
-            JSON_NEW_INT64_FIELD(item, "variablesReference", ref);
-            JSON_NEW_INT64_FIELD(item, "indexedVariables", dim);
+            JSON_NEW_INT64_FIELD(item, "variablesReference", ref);         
             RETCLEAN(SUCCESS);
         case TKIND_SIGNED:
             mem = get_var_value(addr, size, cur_step);

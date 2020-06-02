@@ -30,7 +30,7 @@ CFLAGS := -g3 -gdwarf-2 -O0
 
 .PHONY : all run clean
 
-TESTBINS = test1 test2 test3 test4 test5 test6 test7
+TESTBINS = test1 test2 test3 test4 test5 test6 test7 test8
 
 all: $(TESTBINS)
 
