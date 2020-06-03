@@ -293,7 +293,10 @@ expect
             INVALID("Unsupported comparison operator for boolean operands");
         } else {
             GET_STRING_OPERANDS($2, $4);
-            if (!match(operand1, operand2)) {
+            int ret = match(operand1, operand2);
+            if (ret < 0) {
+                FAILED("Pattern \"%s\" isn't a valid regex", operand2);
+            } else if (!ret) {
                 FAILED("Value \"%s\" doesn't match pattern \"%s\"", operand1, operand2);
             }
         }
@@ -312,7 +315,10 @@ expect
             INVALID("Unsupported comparison operator for boolean operands");
         } else {
             GET_STRING_OPERANDS($2, $4);
-            if (match(operand1, operand2)) {
+            int ret = match(operand1, operand2);
+            if (ret < 0) {
+                FAILED("Pattern \"%s\" isn't a valid regex", operand2);
+            } else if (ret) {
                 FAILED("Value \"%s\" does match pattern \"%s\"", operand1, operand2);
             }
         }

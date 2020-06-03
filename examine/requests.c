@@ -1702,7 +1702,8 @@ void release_cursors(void) {
     DAB_CURSOR_FREE(mem_cursor);
     DAB_CURSOR_FREE(type_cursor);
     DAB_CURSOR_FREE(ref_cursor);
-    DAB_CURSOR_FREE(ref_upsert);
+    DAB_CURSOR_FREE(ref_insert);
+    DAB_CURSOR_FREE(ref_update);
     DAB_CURSOR_FREE(heap_cursor);
     DAB_CURSOR_FREE(func_cursor);
     DAB_CURSOR_FREE(type_name_cursor);

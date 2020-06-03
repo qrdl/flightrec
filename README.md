@@ -53,7 +53,7 @@ Also following libraries are required (with Ubuntu package names, other distribu
 * libelf (`libelf-dev`)
 * libdwarf (`libdwarf-dev`)
 * sqlite3 (`libsqlite3-dev`)
-* json-c (`libjson-c-dev`) version 1.13 or above (versions below 1.13 aren't compatible with Flightrec)
+* json-c (`libjson-c-dev`) version 0.13 or above (versions below 0.13 aren't compatible with Flightrec)
 * libbpf (`libbpfcc-dev`)
 
 ### VSCode extension

@@ -1,0 +1,25 @@
+{
+    "name": "flightrec-tester",
+    "displayName": "Flightrec tester",
+    "description": "Flightrec tester files",
+    "version": "0.0.1",
+    "publisher": "qrdl",
+    "engines": {
+        "vscode": "^1.45.0"
+    },
+    "categories": [
+        "Programming Languages"
+    ],
+    "contributes": {
+        "languages": [{
+            "id": "flightrec_test",
+            "extensions": [".test"],
+            "configuration": "./language-configuration.json"
+        }],
+        "grammars": [{
+            "language": "flightrec_test",
+            "scopeName": "source.test",
+            "path": "./flightrec_test.tmLanguage.json"
+        }]
+    }
+}

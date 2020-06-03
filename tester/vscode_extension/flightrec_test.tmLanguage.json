@@ -1,0 +1,67 @@
+{
+	"$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+	"name": "flightrec_test",
+	"patterns": [
+		{ "include": "#keywords" },
+		{ "include": "#double-quoted" },
+		{ "include": "#single-quoted" },
+		{ "include": "#comments" },
+		{ "include": "#numbers" },
+		{ "include": "#punctuation" },
+		{ "include": "#variables" }
+	],
+	"repository": {
+		"keywords": {
+			"patterns": [{
+				"name": "keyword.flightrec_test",
+				"match": "\\b(start|stop|case|expect|request|response|LENGTH|set)\\b"
+			}]
+		},
+		"double-quoted": {
+			"name": "string.quoted.double.flightrec_test",
+			"begin": "\"",
+			"end": "\"",
+			"patterns": [
+				{
+                    "name": "variable.flightrec_test",
+                    "match": "(\\$\\([^)]*\\))"
+				}
+			]
+		},
+		"single-quoted": {
+			"name": "string.quoted.single.flightrec_test",
+			"begin": "'",
+			"end": "'",
+			"patterns": [
+				{
+                    "name": "variable.flightrec_test",
+                    "match": "(\\$\\([^)]*\\))"
+				}
+			]
+		},
+        "comments": {
+			"name": "comment.line",
+			"begin": "#",
+			"end": "\n"
+        },
+		"numbers": {
+			"patterns": [{
+				"name": "constant.numeric.flightrec_test",
+				"match": "\\b(-?([0-9]+)|([0-9]*\\.[0-9]*))\\b"
+			}]
+		},
+		"punctuation": {
+			"patterns": [{
+				"name": "keyword.control.flightrec_test",
+				"match": "({|}|/|\\[|\\]|=|==|!=|=~|!~|\\(|\\))"
+			}]
+		},
+		"variables": {
+			"patterns": [{
+				"name": "variable.flightrec_test",
+				"match": "(\\$\\([^)]*\\))"
+			}]
+		}
+	},
+	"scopeName": "source.test"
+}
