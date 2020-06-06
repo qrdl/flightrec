@@ -333,7 +333,7 @@ int alter_db(void) {
                     "member.offset = type.offset"
                 ")"
             "WHERE "
-                "flags & " STR(TKIND_TYPE) " = " STR(TKIND_STRUCT))) {
+                "flags & " STR(TKIND_TYPE) " IN (" STR(TKIND_STRUCT) "," STR(TKIND_UNION) ")")) {
         return FAILURE;
     }
 

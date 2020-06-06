@@ -773,6 +773,7 @@ int add_var_entry(JSON_OBJ *container, int parent_type, ULONG parent, char *name
                 if (SUCCESS != get_var_ref(parent_type, parent, name, addr, base_type, indirect, &ref)) {
                     RETCLEAN(FAILURE);
                 }
+                // TODO: Add namedVariables with number of struct fields
             } else {
                 if (SUCCESS != get_var_ref(parent_type, parent, name, addr, type, indirect, &ref)) {
                     RETCLEAN(FAILURE);

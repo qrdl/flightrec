@@ -30,9 +30,8 @@ case "Init" {
         expect /request_seq == 3
         expect /success == true
     }
-}
 
-case "Get scopes" {
+    # get scopes
     request '{"command":"stackTrace","arguments":{"threadId":1,"startFrame":0,"levels":20},"type":"request","seq":4}'
     response {
         expect /type == "response"
@@ -367,3 +366,5 @@ case "Change value in dynamic array" {
         expect /body/variables[2]/value == 42
     }
 }
+
+stop

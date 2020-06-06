@@ -22,8 +22,8 @@ int main(void) {
     first.bar -= 1;
 
     struct item *third = malloc(sizeof(*third));
-    third->bar = 1;
-    third->foo = -1.5;
+    third->bar = -1.5;
+    third->foo = 1;
     third->next = &second;
 
     struct item *two_items = malloc(sizeof(*two_items) * 2);
