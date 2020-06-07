@@ -645,6 +645,18 @@ int add_var_entry(JSON_OBJ *container, int parent_type, ULONG parent, char *name
         return FAILURE;
     }
 
+    struct sr *tname = type_name(type, indirect);
+    while (TKIND_ALIAS == flags) {
+        /* typedef'ed type - drill down to actual type */
+        type = base_type;
+        if (    DAB_OK != DAB_CURSOR_RESET(type_cursor) ||
+                DAB_OK != DAB_CURSOR_BIND(type_cursor, base_type) ||
+                DAB_OK != DAB_CURSOR_FETCH(type_cursor, &size, &dim, &flags, &base_type)) {
+            ERR("Cannot find type with offset %lx", base_type);
+            return FAILURE;
+        }
+    }
+
     JSON_OBJ *item = JSON_ADD_NEW_ITEM(container);
     JSON_NEW_STRING_FIELD(item, "name", name);
 
@@ -652,9 +664,7 @@ int add_var_entry(JSON_OBJ *container, int parent_type, ULONG parent, char *name
     char new_val[64];
     ULONG ref;
     ULONG pointer_size = 0;
-    ULONG dummy;
-    struct sr *tname;
-    tname = type_name(type, indirect);
+    ULONG dummy;   
     int value_added = 0;
 
     // hack to force pointer processing
@@ -1156,7 +1166,8 @@ struct sr *type_name(ULONG type_offset, int indirect) {
                     "type, "
                     "parent_of "
                 "WHERE "
-                    "type.offset = parent_of.parent "
+                    "type.offset = parent_of.parent AND "
+                    "parent_of.flags != " STR(TKIND_ALIAS)
                 ") "
             " SELECT "
                 "name, "
@@ -1194,6 +1205,7 @@ struct sr *type_name(ULONG type_offset, int indirect) {
             case TKIND_SIGNED:
             case TKIND_UNSIGNED:
             case TKIND_FLOAT:
+            case TKIND_ALIAS:
                 STRCAT(res, name);
                 break;
         }
