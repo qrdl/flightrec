@@ -10,7 +10,7 @@ case "Init" {
     response {
         # ignore init done event
     }
-    request '{"command":"launch","arguments":{"request":"launch","program":"$(path)/test7","sourcePath":"$(path)","stopOnEntry":true},"type":"request","seq":2}'
+    request '{"command":"launch","arguments":{"request":"launch","program":"$(path)/test07","sourcePath":"$(path)","stopOnEntry":true},"type":"request","seq":2}'
     # response
     response {
         expect /type == "response"
@@ -43,8 +43,8 @@ case "Init" {
         expect /body/stackFrames[0]/id == 0
         expect /body/stackFrames[0]/line == 5
         expect /body/stackFrames[0]/column == 0
-        expect /body/stackFrames[0]/source/name == test7.c
-        expect /body/stackFrames[0]/source/path == "$(path)/test7.c"
+        expect /body/stackFrames[0]/source/name == test07.c
+        expect /body/stackFrames[0]/source/path == "$(path)/test07.c"
         expect /body/stackFrames[0]/source/sourceReference == 0
 
     }

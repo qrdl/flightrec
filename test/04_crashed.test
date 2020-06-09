@@ -21,7 +21,7 @@ case "Init" {
 }
 
 case "Launch" {
-    request '{"command":"launch","arguments":{"request":"launch","program":"$(path)/test2","sourcePath":"$(path)","stopOnEntry":true,},"type":"request","seq":2}'
+    request '{"command":"launch","arguments":{"request":"launch","program":"$(path)/test02","sourcePath":"$(path)","stopOnEntry":true,},"type":"request","seq":2}'
     # response
     response {
         expect /type == "response"
@@ -72,8 +72,8 @@ case "Continue (to crash)" {
         expect /body/stackFrames[0]/id == 0
         expect /body/stackFrames[0]/line == 7
         expect /body/stackFrames[0]/column == 0
-        expect /body/stackFrames[0]/source/name == test2.c
-        expect /body/stackFrames[0]/source/path == "$(path)/test2.c"
+        expect /body/stackFrames[0]/source/name == test02.c
+        expect /body/stackFrames[0]/source/path == "$(path)/test02.c"
         expect /body/stackFrames[0]/source/sourceReference == 0
     }
 }
@@ -118,8 +118,8 @@ case "Step forward once (just before crash)" {
         expect /body/stackFrames[0]/id == 0
         expect /body/stackFrames[0]/line == 7
         expect /body/stackFrames[0]/column == 0
-        expect /body/stackFrames[0]/source/name == test2.c
-        expect /body/stackFrames[0]/source/path == "$(path)/test2.c"
+        expect /body/stackFrames[0]/source/name == test02.c
+        expect /body/stackFrames[0]/source/path == "$(path)/test02.c"
         expect /body/stackFrames[0]/source/sourceReference == 0
     }
 }
@@ -151,8 +151,8 @@ case "Step into crash" {
         expect /body/stackFrames[0]/id == 0
         expect /body/stackFrames[0]/line == 7
         expect /body/stackFrames[0]/column == 0
-        expect /body/stackFrames[0]/source/name == test2.c
-        expect /body/stackFrames[0]/source/path == "$(path)/test2.c"
+        expect /body/stackFrames[0]/source/name == test02.c
+        expect /body/stackFrames[0]/source/path == "$(path)/test02.c"
         expect /body/stackFrames[0]/source/sourceReference == 0
     }
 }

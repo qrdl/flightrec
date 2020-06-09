@@ -1,0 +1,151 @@
+# Caller must set $(path)
+start "../examine/fr_examine"
+
+case "Init" {
+    request '{"command":"initialize","arguments":{"clientID":"tester","clientName":"Tester"},"type":"request","seq":1}'
+    # response
+    response {
+        # ignore init response
+    }
+    response {
+        # ignore init done event
+    }
+    request '{"command":"launch","arguments":{"request":"launch","program":"$(path)/test10","sourcePath":"$(path)","stopOnEntry":true},"type":"request","seq":2}'
+    # response
+    response {
+        expect /type == "response"
+        expect /command == launch
+        expect /request_seq == 2
+        expect /success == true
+    }
+    response {
+        expect /type == event
+        expect /event == stopped
+        expect /body/reason == entry
+    }
+    request '{"command":"configurationDone","type":"request","seq":3}'
+    response {
+        expect /type == "response"
+        expect /command == configurationDone
+        expect /request_seq == 3
+        expect /success == true
+    }
+
+    # get scopes
+    request '{"command":"stackTrace","arguments":{"threadId":1,"startFrame":0,"levels":20},"type":"request","seq":4}'
+    response {
+        expect /type == "response"
+        expect /command == stackTrace
+        expect /request_seq == 4
+        expect /success == true
+
+        expect /body/stackFrames[0]/name == main
+        expect /body/stackFrames[0]/id == 0
+        expect /body/stackFrames[0]/line == 8
+        expect /body/stackFrames[0]/column == 0
+        expect /body/stackFrames[0]/source/name == test10.c
+        expect /body/stackFrames[0]/source/path == "$(path)/test10.c"
+        expect /body/stackFrames[0]/source/sourceReference == 0
+
+    }
+    request '{"command":"scopes","arguments":{"frameId":0},"type":"request","seq":5}'
+    response {
+        expect /type == "response"
+        expect /command == scopes
+        expect /request_seq == 5
+        expect /success == true
+
+        expect /body/scopes[0]/name == Globals
+        set global_scope = /body/scopes[0]/variablesReference
+
+        expect /body/scopes[1]/name == Locals
+        set local_scope = /body/scopes[1]/variablesReference
+    }
+}
+
+case "Enum type var" {
+    request '{"command":"next","arguments":{"threadId":1},"type":"request","seq":6}'
+    response {
+        # ignore response
+    }
+    response {
+        # ignore stop event
+    }
+    request '{"command":"next","arguments":{"threadId":1},"type":"request","seq":7}'
+    response {
+        # ignore response
+    }
+    response {
+        # ignore stop event
+    }
+    request '{"command":"stackTrace","arguments":{"threadId":1,"startFrame":0,"levels":20},"type":"request","seq":8}'
+    response {
+        # ignore response
+    }
+    request '{"command":"variables","arguments":{"variablesReference":$(local_scope) },"type":"request","seq":9}'
+    response {
+        expect /type == "response"
+        expect /command == variables
+        expect /request_seq == 9
+        expect /success == true
+        expect LENGTH(/body/variables) == 1
+
+        expect /body/variables[0]/name == bar
+        expect /body/variables[0]/variablesReference == 0
+        expect /body/variables[0]/value == "two (2)"
+    }
+}
+
+case "Change enum type var" {
+    request '{"command":"next","arguments":{"threadId":1},"type":"request","seq":10}'
+    response {
+        # ignore response
+    }
+    response {
+        # ignore stop event
+    }
+    request '{"command":"stackTrace","arguments":{"threadId":1,"startFrame":0,"levels":20},"type":"request","seq":11}'
+    response {
+        # ignore response
+    }
+    request '{"command":"variables","arguments":{"variablesReference":$(local_scope) },"type":"request","seq":12}'
+    response {
+        expect /type == "response"
+        expect /command == variables
+        expect /request_seq == 12
+        expect /success == true
+        expect LENGTH(/body/variables) == 1
+
+        expect /body/variables[0]/name == bar
+        expect /body/variables[0]/variablesReference == 0
+        expect /body/variables[0]/value == "three (3)"
+    }
+}
+
+case "Assign enum value to int var" {
+    request '{"command":"next","arguments":{"threadId":1},"type":"request","seq":13}'
+    response {
+        # ignore response
+    }
+    response {
+        # ignore stop event
+    }
+    request '{"command":"stackTrace","arguments":{"threadId":1,"startFrame":0,"levels":20},"type":"request","seq":13}'
+    response {
+        # ignore response
+    }
+    request '{"command":"variables","arguments":{"variablesReference":$(local_scope) },"type":"request","seq":14}'
+    response {
+        expect /type == "response"
+        expect /command == variables
+        expect /request_seq == 14
+        expect /success == true
+        expect LENGTH(/body/variables) == 2
+
+        expect /body/variables[1]/name == baz
+        expect /body/variables[1]/variablesReference == 0
+        expect /body/variables[1]/value == 3
+    }
+}
+
+stop

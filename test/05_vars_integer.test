@@ -10,7 +10,7 @@ case "Init" {
     response {
         # ignore init done event
     }
-    request '{"command":"launch","arguments":{"request":"launch","program":"$(path)/test4","sourcePath":"$(path)","stopOnEntry":true},"type":"request","seq":2}'
+    request '{"command":"launch","arguments":{"request":"launch","program":"$(path)/test04","sourcePath":"$(path)","stopOnEntry":true},"type":"request","seq":2}'
     # response
     response {
         expect /type == "response"
@@ -23,7 +23,7 @@ case "Init" {
         expect /event == stopped
         expect /body/reason == entry
     }
-    request '{"command":"setBreakpoints","arguments":{"source":{"name":"test4.c","path":"$(path)/test4.c"},"lines":[30],"breakpoints":[{"line":30}],"sourceModified":false},"type":"request","seq":3}'
+    request '{"command":"setBreakpoints","arguments":{"source":{"name":"test04.c","path":"$(path)/test04.c"},"lines":[30],"breakpoints":[{"line":30}],"sourceModified":false},"type":"request","seq":3}'
     response {
         expect /type == "response"
         expect /command == setBreakpoints
@@ -54,8 +54,8 @@ case "Get scopes" {
         expect /body/stackFrames[0]/id == 0
         expect /body/stackFrames[0]/line == 16
         expect /body/stackFrames[0]/column == 0
-        expect /body/stackFrames[0]/source/name == test4.c
-        expect /body/stackFrames[0]/source/path == "$(path)/test4.c"
+        expect /body/stackFrames[0]/source/name == test04.c
+        expect /body/stackFrames[0]/source/path == "$(path)/test04.c"
         expect /body/stackFrames[0]/source/sourceReference == 0
 
     }

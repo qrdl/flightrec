@@ -309,7 +309,6 @@ void lost_event(LOST_CB_ARGS) {
 static void process_event(void *cb_cookie, void *raw, int raw_size) {
     static int counter;
     struct bpf_event *event = raw;
-    int hi, lo;
 
     switch (event->type) {
         case BPF_EVT_PAGEFAULT:
