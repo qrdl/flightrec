@@ -62,12 +62,12 @@
 #define TKIND_FUNC      8
 #define TKIND_CLASS     9
 #define TKIND_ENUM      10
+#define TKIND_ALIAS     11
 #define TKIND_TYPE      0x0000FFFF
 
 #define TKIND_CONST     0x00010000
 #define TKIND_VOLATILE  0x00020000
 #define TKIND_RESTRICT  0x00040000
-#define TKIND_ALIAS     0x00080000
 #define TKIND_ATTRS     0xFFFF0000
 
 /* aggregate member kind */

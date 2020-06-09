@@ -1475,7 +1475,7 @@ int process_evaluate(const JSON_OBJ *request, int fd) {
         }
         scope = cur_frame->scope;
         step = cur_frame->step;
-    } else if (JSON_OK != json_err) {
+    } else {
         error = "Cannot get 'frameId' param in 'evaluate' request";
         ERR(error);
         RETCLEAN(FAILURE);

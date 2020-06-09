@@ -1,0 +1,624 @@
+# Caller must set $(path)
+start "../examine/fr_examine"
+
+case "Init" {
+    request '{"command":"initialize","arguments":{"clientID":"tester","clientName":"Tester"},"type":"request","seq":1}'
+    # response
+    response {
+        # ignore init response
+    }
+    response {
+        # ignore init done event
+    }
+    request '{"command":"launch","arguments":{"request":"launch","program":"$(path)/test08","sourcePath":"$(path)","stopOnEntry":true},"type":"request","seq":2}'
+    # response
+    response {
+        expect /type == "response"
+        expect /command == launch
+        expect /request_seq == 2
+        expect /success == true
+    }
+    response {
+        expect /type == event
+        expect /event == stopped
+        expect /body/reason == entry
+    }
+    request '{"command":"configurationDone","type":"request","seq":3}'
+    response {
+        expect /type == "response"
+        expect /command == configurationDone
+        expect /request_seq == 3
+        expect /success == true
+    }
+
+    # get scopes
+    request '{"command":"stackTrace","arguments":{"threadId":1,"startFrame":0,"levels":20},"type":"request","seq":4}'
+    response {
+        expect /type == "response"
+        expect /command == stackTrace
+        expect /request_seq == 4
+        expect /success == true
+
+        expect /body/stackFrames[0]/name == main
+        expect /body/stackFrames[0]/id == 0
+        expect /body/stackFrames[0]/line == 18
+        expect /body/stackFrames[0]/column == 0
+        expect /body/stackFrames[0]/source/name == test08.c
+        expect /body/stackFrames[0]/source/path == "$(path)/test08.c"
+        expect /body/stackFrames[0]/source/sourceReference == 0
+
+    }
+    request '{"command":"scopes","arguments":{"frameId":0},"type":"request","seq":5}'
+    response {
+        expect /type == "response"
+        expect /command == scopes
+        expect /request_seq == 5
+        expect /success == true
+
+        expect /body/scopes[0]/name == Globals
+        set global_scope = /body/scopes[0]/variablesReference
+
+        expect /body/scopes[1]/name == Locals
+        set local_scope = /body/scopes[1]/variablesReference
+    }
+}
+
+case "Global struct" {
+    request '{"command":"variables","arguments":{"variablesReference":$(global_scope) },"type":"request","seq":6}'
+    response {
+        expect /type == "response"
+        expect /command == variables
+        expect /request_seq == 6
+        expect /success == true
+        expect LENGTH(/body/variables) == 2
+
+        expect /body/variables[0]/name == first
+        expect /body/variables[0]/namedVariables == 3
+        set first_ref = /body/variables[0]/variablesReference
+        expect /body/variables[0]/value == "struct item"
+
+        expect /body/variables[1]/name == mu
+        expect /body/variables[1]/namedVariables == 2
+        set mu_ref = /body/variables[1]/variablesReference
+        expect /body/variables[1]/value == "union my_union"
+    }
+    request '{"command":"variables","arguments":{"variablesReference":$(first_ref) },"type":"request","seq":7}'
+    response {
+        expect /type == "response"
+        expect /command == variables
+        expect /request_seq == 7
+        expect /success == true
+        expect LENGTH(/body/variables) == 3
+
+        expect /body/variables[0]/name == "foo"
+        expect /body/variables[0]/variablesReference == 0
+        expect /body/variables[0]/value == 7
+
+        expect /body/variables[1]/name == "bar"
+        expect /body/variables[1]/variablesReference == 0
+        expect /body/variables[1]/value == 2.71828
+
+        expect /body/variables[2]/name == "next"
+        expect /body/variables[2]/variablesReference == 0
+        expect /body/variables[2]/value == NULL
+    }
+}
+
+case "Global union" {
+    request '{"command":"variables","arguments":{"variablesReference":$(mu_ref) },"type":"request","seq":8}'
+    response {
+        expect /type == "response"
+        expect /command == variables
+        expect /request_seq == 8
+        expect /success == true
+        expect LENGTH(/body/variables) == 2
+
+        expect /body/variables[0]/name == a
+        expect /body/variables[0]/variablesReference == 0
+        expect /body/variables[0]/value == 6513249
+
+        expect /body/variables[1]/name == "b"
+        expect /body/variables[1]/variablesReference == 0
+        expect /body/variables[1]/value =~ "0x[0-9a-f]* \"abc\""
+    }
+}
+
+case "Local struct with pointer to struct" {
+    request '{"command":"next","arguments":{"threadId":1},"type":"request","seq":9}'
+    response {
+        # ignore response
+    }
+    response {
+        # ignore stop event
+    }
+    request '{"command":"next","arguments":{"threadId":1},"type":"request","seq":10}'
+    response {
+        # ignore response
+    }
+    response {
+        # ignore stop event
+    }
+    request '{"command":"stackTrace","arguments":{"threadId":1,"startFrame":0,"levels":20},"type":"request","seq":11}'
+    response {
+        # ignore response
+    }
+    request '{"command":"variables","arguments":{"variablesReference":$(local_scope) },"type":"request","seq":12}'
+    response {
+        expect /type == "response"
+        expect /command == variables
+        expect /request_seq == 12
+        expect /success == true
+        expect LENGTH(/body/variables) == 1
+
+        expect /body/variables[0]/name == second
+        set second_ref = /body/variables[0]/variablesReference
+        expect /body/variables[0]/namedVariables == 3
+        expect /body/variables[0]/value == "struct item"
+    }
+    request '{"command":"variables","arguments":{"variablesReference":$(second_ref) },"type":"request","seq":13}'
+    response {
+        expect /type == "response"
+        expect /command == variables
+        expect /request_seq == 13
+        expect /success == true
+        expect LENGTH(/body/variables) == 3
+
+        expect /body/variables[0]/name == "foo"
+        expect /body/variables[0]/variablesReference == 0
+        expect /body/variables[0]/value == 5
+
+        expect /body/variables[1]/name == "bar"
+        expect /body/variables[1]/variablesReference == 0
+        expect /body/variables[1]/value == 3.14159
+
+        expect /body/variables[2]/name == "next"
+        set second_next_ref = /body/variables[2]/variablesReference
+        expect /body/variables[2]/value =~ "(struct item\*)0x[0-9a-f]*"
+    }
+    request '{"command":"variables","arguments":{"variablesReference":$(second_next_ref) },"type":"request","seq":14}'
+    response {
+        expect /type == "response"
+        expect /command == variables
+        expect /request_seq == 14
+        expect /success == true
+        expect LENGTH(/body/variables) == 3
+
+        expect /body/variables[0]/name == "foo"
+        expect /body/variables[0]/variablesReference == 0
+        expect /body/variables[0]/value == 7
+
+        expect /body/variables[1]/name == "bar"
+        expect /body/variables[1]/variablesReference == 0
+        expect /body/variables[1]/value == 2.71828
+
+        expect /body/variables[2]/name == "next"
+        expect /body/variables[2]/variablesReference == 0
+        expect /body/variables[2]/value == NULL
+    }
+}
+
+case "Change local struct field" {
+    request '{"command":"next","arguments":{"threadId":1},"type":"request","seq":15}'
+    response {
+        # ignore response
+    }
+    response {
+        # ignore stop event
+    }
+    request '{"command":"stackTrace","arguments":{"threadId":1,"startFrame":0,"levels":20},"type":"request","seq":16}'
+    response {
+        # ignore response
+    }
+    request '{"command":"variables","arguments":{"variablesReference":$(second_ref) },"type":"request","seq":17}'
+    response {
+        expect /type == "response"
+        expect /command == variables
+        expect /request_seq == 17
+        expect /success == true
+        expect LENGTH(/body/variables) == 3
+
+        expect /body/variables[0]/name == "foo"
+        expect /body/variables[0]/variablesReference == 0
+        expect /body/variables[0]/value == 2
+
+        expect /body/variables[1]/name == "bar"
+        expect /body/variables[1]/variablesReference == 0
+        expect /body/variables[1]/value == 3.14159
+
+        expect /body/variables[2]/name == "next"
+        expect /body/variables[2]/variablesReference == "$(second_next_ref)"
+        expect /body/variables[2]/value =~ "(struct item\*)0x[0-9a-f]*"
+    }
+}
+
+case "Change global struct field" {
+    request '{"command":"next","arguments":{"threadId":1},"type":"request","seq":18}'
+    response {
+        # ignore response
+    }
+    response {
+        # ignore stop event
+    }
+    request '{"command":"stackTrace","arguments":{"threadId":1,"startFrame":0,"levels":20},"type":"request","seq":19}'
+    response {
+        # ignore response
+    }
+    request '{"command":"variables","arguments":{"variablesReference":$(first_ref) },"type":"request","seq":20}'
+    response {
+        expect /type == "response"
+        expect /command == variables
+        expect /request_seq == 20
+        expect /success == true
+        expect LENGTH(/body/variables) == 3
+
+        expect /body/variables[0]/name == "foo"
+        expect /body/variables[0]/variablesReference == 0
+        expect /body/variables[0]/value == 7
+
+        expect /body/variables[1]/name == "bar"
+        expect /body/variables[1]/variablesReference == 0
+        expect /body/variables[1]/value == 1.71828      # e-1
+
+        expect /body/variables[2]/name == "next"
+        expect /body/variables[2]/variablesReference == 0
+        expect /body/variables[2]/value == NULL
+    }
+    # should be the same as we access the same structure in a different way
+    request '{"command":"variables","arguments":{"variablesReference":$(second_next_ref) },"type":"request","seq":21}'
+    response {
+        expect /type == "response"
+        expect /command == variables
+        expect /request_seq == 21
+        expect /success == true
+        expect LENGTH(/body/variables) == 3
+
+        expect /body/variables[0]/name == "foo"
+        expect /body/variables[0]/variablesReference == 0
+        expect /body/variables[0]/value == 7
+
+        expect /body/variables[1]/name == "bar"
+        expect /body/variables[1]/variablesReference == 0
+        expect /body/variables[1]/value == 1.71828      # e-1
+
+        expect /body/variables[2]/name == "next"
+        expect /body/variables[2]/variablesReference == 0
+        expect /body/variables[2]/value == NULL
+    }
+}
+
+case "Pointer to struct" {
+    # skip 4 lines
+    request '{"command":"next","arguments":{"threadId":1},"type":"request","seq":22}'
+    response {
+        # ignore response
+    }
+    response {
+        # ignore stop event
+    }
+    request '{"command":"next","arguments":{"threadId":1},"type":"request","seq":23}'
+    response {
+        # ignore response
+    }
+    response {
+        # ignore stop event
+    }
+    request '{"command":"next","arguments":{"threadId":1},"type":"request","seq":24}'
+    response {
+        # ignore response
+    }
+    response {
+        # ignore stop event
+    }
+    request '{"command":"next","arguments":{"threadId":1},"type":"request","seq":25}'
+    response {
+        # ignore response
+    }
+    response {
+        # ignore stop event
+    }
+    request '{"command":"stackTrace","arguments":{"threadId":1,"startFrame":0,"levels":20},"type":"request","seq":26}'
+    response {
+        # ignore response
+    }
+    request '{"command":"variables","arguments":{"variablesReference":$(local_scope) },"type":"request","seq":27}'
+    response {
+        expect /type == "response"
+        expect /command == variables
+        expect /request_seq == 27
+        expect /success == true
+        expect LENGTH(/body/variables) == 2
+
+        expect /body/variables[0]/name == second
+        expect /body/variables[0]/namedVariables == 3
+        expect /body/variables[0]/value == "struct item"
+
+        expect /body/variables[1]/name == third
+        set third_ref = /body/variables[1]/variablesReference
+        expect /body/variables[1]/value =~ "(struct item\*)0x[0-9a-f]*"
+    }
+    request '{"command":"variables","arguments":{"variablesReference":$(third_ref) },"type":"request","seq":28}'
+    response {
+        expect /type == "response"
+        expect /command == variables
+        expect /request_seq == 28
+        expect /success == true
+        expect LENGTH(/body/variables) == 3
+
+        expect /body/variables[0]/name == "foo"
+        expect /body/variables[0]/variablesReference == 0
+        expect /body/variables[0]/value == 1
+
+        expect /body/variables[1]/name == "bar"
+        expect /body/variables[1]/variablesReference == 0
+        expect /body/variables[1]/value == -1.5
+
+        expect /body/variables[2]/name == "next"
+        set third_next_ref = /body/variables[2]/variablesReference
+        expect /body/variables[2]/value =~ "(struct item\*)0x[0-9a-f]*"
+    }
+    # must be the same as second
+    request '{"command":"variables","arguments":{"variablesReference":$(third_next_ref) },"type":"request","seq":29}'
+    response {
+        expect /type == "response"
+        expect /command == variables
+        expect /request_seq == 29
+        expect /success == true
+        expect LENGTH(/body/variables) == 3
+
+        expect /body/variables[0]/name == "foo"
+        expect /body/variables[0]/variablesReference == 0
+        expect /body/variables[0]/value == 2
+
+        expect /body/variables[1]/name == "bar"
+        expect /body/variables[1]/variablesReference == 0
+        expect /body/variables[1]/value == 3.14159
+
+        expect /body/variables[2]/name == "next"
+        expect /body/variables[2]/variablesReference != 0
+        expect /body/variables[2]/value =~ "(struct item\*)0x[0-9a-f]*"
+    }
+}
+
+case "Array of structs" {
+    # skip 5 lines
+    request '{"command":"next","arguments":{"threadId":1},"type":"request","seq":30}'
+    response {
+        # ignore response
+    }
+    response {
+        # ignore stop event
+    }
+    request '{"command":"next","arguments":{"threadId":1},"type":"request","seq":31}'
+    response {
+        # ignore response
+    }
+    response {
+        # ignore stop event
+    }
+    request '{"command":"next","arguments":{"threadId":1},"type":"request","seq":32}'
+    response {
+        # ignore response
+    }
+    response {
+        # ignore stop event
+    }
+    request '{"command":"next","arguments":{"threadId":1},"type":"request","seq":33}'
+    response {
+        # ignore response
+    }
+    response {
+        # ignore stop event
+    }
+    request '{"command":"next","arguments":{"threadId":1},"type":"request","seq":34}'
+    response {
+        # ignore response
+    }
+    response {
+        # ignore stop event
+    }
+    request '{"command":"stackTrace","arguments":{"threadId":1,"startFrame":0,"levels":20},"type":"request","seq":35}'
+    response {
+        # ignore response
+    }
+    request '{"command":"variables","arguments":{"variablesReference":$(local_scope) },"type":"request","seq":36}'
+    response {
+        expect /type == "response"
+        expect /command == variables
+        expect /request_seq == 36
+        expect /success == true
+        expect LENGTH(/body/variables) == 3
+
+        expect /body/variables[2]/name == two_items
+        set two_items_ref = /body/variables[2]/variablesReference
+        expect /body/variables[2]/indexedVariables == 2
+        expect /body/variables[2]/value =~ "(struct item\*)0x[0-9a-f]*"
+    }
+    request '{"command":"variables","arguments":{"variablesReference":$(two_items_ref), "filter":"indexed", "start": 0, "count": 2 },"type":"request","seq":37}'
+    response {
+        expect /type == "response"
+        expect /command == variables
+        expect /request_seq == 37
+        expect /success == true
+        expect LENGTH(/body/variables) == 2
+
+        expect /body/variables[0]/name == "[0]"
+        set two_items_ref0 = /body/variables[0]/variablesReference
+        expect /body/variables[0]/value == "struct item"
+
+        expect /body/variables[1]/name == "[1]"
+        set two_items_ref1 = /body/variables[1]/variablesReference
+        expect /body/variables[1]/value == "struct item"
+    }
+    request '{"command":"variables","arguments":{"variablesReference":$(two_items_ref0) },"type":"request","seq":38}'
+    response {
+        expect /type == "response"
+        expect /command == variables
+        expect /request_seq == 38
+        expect /success == true
+        expect LENGTH(/body/variables) == 3
+
+        expect /body/variables[0]/name == "foo"
+        expect /body/variables[0]/variablesReference == 0
+        expect /body/variables[0]/value == -5
+
+        expect /body/variables[1]/name == "bar"
+        expect /body/variables[1]/variablesReference == 0
+        expect /body/variables[1]/value == 7.5
+
+        expect /body/variables[2]/name == "next"
+        set two_items_ref0_next = /body/variables[2]/variablesReference
+        expect /body/variables[2]/value =~ "(struct item\*)0x[0-9a-f]*"
+    }
+    request '{"command":"variables","arguments":{"variablesReference":$(two_items_ref1) },"type":"request","seq":39}'
+    response {
+        expect /type == "response"
+        expect /command == variables
+        expect /request_seq == 39
+        expect /success == true
+        expect LENGTH(/body/variables) == 3
+
+        expect /body/variables[0]/name == "foo"
+        expect /body/variables[0]/variablesReference == 0
+        expect /body/variables[0]/value == -5
+
+        expect /body/variables[1]/name == "bar"
+        expect /body/variables[1]/variablesReference == 0
+        expect /body/variables[1]/value == 7.5
+
+        expect /body/variables[2]/name == "next"
+        set two_items_ref1_next = /body/variables[2]/variablesReference
+        expect /body/variables[2]/value =~ "(struct item\*)0x[0-9a-f]*"
+    }
+    # must be the same as 'third'
+    request '{"command":"variables","arguments":{"variablesReference":$(two_items_ref0_next) },"type":"request","seq":40}'
+    response {
+        expect /type == "response"
+        expect /command == variables
+        expect /request_seq == 40
+        expect /success == true
+        expect LENGTH(/body/variables) == 3
+
+        expect /body/variables[0]/name == "foo"
+        expect /body/variables[0]/variablesReference == 0
+        expect /body/variables[0]/value == 1
+
+        expect /body/variables[1]/name == "bar"
+        expect /body/variables[1]/variablesReference == 0
+        expect /body/variables[1]/value == -1.5
+
+        expect /body/variables[2]/name == "next"
+        expect /body/variables[2]/value =~ "(struct item\*)0x[0-9a-f]*"
+    }
+    # must be the same as 'first'
+    request '{"command":"variables","arguments":{"variablesReference":$(two_items_ref1_next) },"type":"request","seq":41}'
+    response {
+        expect /type == "response"
+        expect /command == variables
+        expect /request_seq == 41
+        expect /success == true
+        expect LENGTH(/body/variables) == 3
+
+        expect /body/variables[0]/name == "foo"
+        expect /body/variables[0]/variablesReference == 0
+        expect /body/variables[0]/value == 7
+
+        expect /body/variables[1]/name == "bar"
+        expect /body/variables[1]/variablesReference == 0
+        expect /body/variables[1]/value == 1.71828      # e-1
+
+        expect /body/variables[2]/name == "next"
+        expect /body/variables[2]/variablesReference == 0
+        expect /body/variables[2]/value == NULL
+    }
+}
+
+case "Double pointer to struct" {
+    request '{"command":"next","arguments":{"threadId":1},"type":"request","seq":42}'
+    response {
+        # ignore response
+    }
+    response {
+        # ignore stop event
+    }
+    request '{"command":"stackTrace","arguments":{"threadId":1,"startFrame":0,"levels":20},"type":"request","seq":43}'
+    response {
+        # ignore response
+    }
+    request '{"command":"variables","arguments":{"variablesReference":$(local_scope) },"type":"request","seq":44}'
+    response {
+        expect /type == "response"
+        expect /command == variables
+        expect /request_seq == 44
+        expect /success == true
+        expect LENGTH(/body/variables) == 4
+
+        expect /body/variables[3]/name == ppstruct
+        set ppstruct_ref = /body/variables[3]/variablesReference
+        expect /body/variables[3]/indexedVariables == 1
+        expect /body/variables[3]/value =~ "(struct item\*\*)0x[0-9a-f]*"
+    }
+    request '{"command":"variables","arguments":{"variablesReference":$(ppstruct_ref), "filter":"indexed", "start": 0, "count": 1 },"type":"request","seq":45}'
+    response {
+        expect /type == "response"
+        expect /command == variables
+        expect /request_seq == 45
+        expect /success == true
+        expect LENGTH(/body/variables) == 1
+
+        expect /body/variables[0]/name == "[0]"
+        set ppstruct_ref = /body/variables[0]/variablesReference
+        expect /body/variables[0]/value =~ "(struct item\*)0x[0-9a-f]*"
+    }
+    # must be the same as 'third'
+    request '{"command":"variables","arguments":{"variablesReference":$(ppstruct_ref) },"type":"request","seq":46}'
+    response {
+        expect /type == "response"
+        expect /command == variables
+        expect /request_seq == 46
+        expect /success == true
+        expect LENGTH(/body/variables) == 3
+
+        expect /body/variables[0]/name == "foo"
+        expect /body/variables[0]/variablesReference == 0
+        expect /body/variables[0]/value == 1
+
+        expect /body/variables[1]/name == "bar"
+        expect /body/variables[1]/variablesReference == 0
+        expect /body/variables[1]/value == -1.5
+
+        expect /body/variables[2]/name == "next"
+        expect /body/variables[2]/value =~ "(struct item\*)0x[0-9a-f]*"
+    }
+}
+
+case "Change union field" {
+    request '{"command":"next","arguments":{"threadId":1},"type":"request","seq":47}'
+    response {
+        # ignore response
+    }
+    response {
+        # ignore stop event
+    }
+    request '{"command":"stackTrace","arguments":{"threadId":1,"startFrame":0,"levels":20},"type":"request","seq":48}'
+    response {
+        # ignore response
+    }
+    request '{"command":"variables","arguments":{"variablesReference":$(mu_ref) },"type":"request","seq":49}'
+    response {
+        expect /type == "response"
+        expect /command == variables
+        expect /request_seq == 49
+        expect /success == true
+        expect LENGTH(/body/variables) == 2
+
+        expect /body/variables[0]/name == a
+        expect /body/variables[0]/variablesReference == 0
+        expect /body/variables[0]/value == 6578785
+
+        expect /body/variables[1]/name == "b"
+        expect /body/variables[1]/variablesReference == 0
+        expect /body/variables[1]/value =~ "0x[0-9a-f]* \"abd\""
+    }
+}
+
+stop

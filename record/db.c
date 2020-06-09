@@ -270,6 +270,7 @@ int alter_db(void) {
         return FAILURE;
     }
 
+    // TODO it sets indirecton incorrectly for types, derived from custom pointer types, check impact on expressions
     /* set indirections for types, derived from pointers */
     if (DAB_OK != DAB_EXEC("UPDATE type SET indirect = indirect+1 "
             "WHERE "
@@ -283,7 +284,8 @@ int alter_db(void) {
                     "WHERE "
                         "(a.flags & " STR(TKIND_TYPE) ") = " STR(TKIND_POINTER) " AND "
                         "a.rowid != d.rowid"
-                ")")) {
+                ") AND "
+                "flags != " STR(TKIND_ALIAS))) {
         return FAILURE;
     }
 
@@ -333,7 +335,7 @@ int alter_db(void) {
                     "member.offset = type.offset"
                 ")"
             "WHERE "
-                "flags & " STR(TKIND_TYPE) " = " STR(TKIND_STRUCT))) {
+                "flags & " STR(TKIND_TYPE) " IN (" STR(TKIND_STRUCT) "," STR(TKIND_UNION) ")")) {
         return FAILURE;
     }
 
