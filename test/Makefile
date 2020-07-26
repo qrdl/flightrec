@@ -38,7 +38,7 @@ run: ${TESTBINS:%=%.fr}
 	../tester/tester -v path="$(shell pwd)" *.test
 
 %.fr: %
-	fr_record -l test.log -- ./$^
+	fr_record -l record.log -- ./$^
 
 .SECONDEXPANSION:
 $(TESTBINS): $$(addsuffix *.c,$$@)

@@ -90,7 +90,7 @@
 struct ast_node {
     int         node_type;
     /* datatype attrbites */
-    uint64_t    type_offset;
+    int64_t    type_offset;     // can be negative for casting to basic type
     int         type_kind;      // one of TKIND_XXX constants
     size_t      size;
     int         indirect;       // number of indirections, e.g. how many dereferences needed to get the value
@@ -120,12 +120,12 @@ struct ast_node {
     };
 };
 
-int get_var_details(const char *name, uint64_t scope, uint64_t *var_id, uint64_t *type_offset, int *kind, size_t *size,
+int get_var_details(const char *name, uint64_t scope, uint64_t *var_id, int64_t *type_offset, int *kind, size_t *size,
                     int *indirect);
-int get_base_type_details(uint64_t offset, uint64_t *type_offset, int *kind, size_t *size, int *indirect);
-int get_field_details(const char *name, uint64_t type, uint64_t *type_offset, int *kind, size_t *size, uint64_t *start,
+int get_base_type_details(int64_t offset, int64_t *type_offset, int *kind, size_t *size, int *indirect);
+int get_field_details(const char *name, int64_t type, int64_t *type_offset, int *kind, size_t *size, uint64_t *start,
                     int *indirect);
-int get_struct_details(const char *name, uint64_t *offset, int *kind, size_t *size);
-int get_type_details(const char *name, uint64_t *offset, int *kind, size_t *size);
+int get_struct_details(const char *name, int64_t *offset, int *kind, size_t *size);
+int get_type_details(const char *name, int64_t *offset, int *kind, size_t *size);
 
 #endif

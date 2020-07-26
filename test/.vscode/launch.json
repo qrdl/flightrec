@@ -10,7 +10,7 @@
             "request": "launch",
             "program": "${workspaceFolder}/test01",
             "sourcePath": "${workspaceFolder}",
-            "stopOnEntry": true,
+            "stopOnEntry": false,
             "debugServer": 1337
         },
         {

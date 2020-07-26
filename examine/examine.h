@@ -55,8 +55,9 @@ int add_var_fields(JSON_OBJ *container, ULONG ref_id);
 int get_var_address(uint64_t var_id, uint64_t step, char **name, uint64_t *address, uint64_t *type_offset);
 char *get_var_value(ULONG addr, size_t size, uint64_t step);
 int get_var_ref(int parent_type, ULONG parent, const char *child, ULONG address, ULONG type, int indirect, ULONG *ref);
-struct sr *type_name(ULONG type_offset, int indirect);
+struct sr *type_name(int64_t type_offset, int indirect);
 int get_pointer_size(ULONG address, ULONG *size);
+int get_type_size(int64_t offset, uint64_t *size, uint64_t *dim, uint64_t *flags, uint64_t *base_type);
 
 void release_cursors(void);
 

@@ -387,6 +387,30 @@ int alter_db(void) {
         return FAILURE;
     }
 
+#define ADD_BASIC_TYPE(N,S,F) do {\
+    if (DAB_OK != DAB_EXEC("INSERT INTO type (offset, size, flags, name, unit_id, parent) VALUES (?, ?, ?, ?, 0, 0)", \
+                                              -1 * ((S << 8) + F), \
+                                                      S,    F,     N)) { \
+        return FAILURE; \
+    } \
+} while (0)
+
+    /* add dummy entries for basic datatypes to allow these basic types to be used for casting
+       in expressions */
+    ADD_BASIC_TYPE("uint8_t", 1, TKIND_UNSIGNED);
+    ADD_BASIC_TYPE("uint16_t", 2, TKIND_UNSIGNED);
+    ADD_BASIC_TYPE("uint32_t", 4, TKIND_UNSIGNED);
+    ADD_BASIC_TYPE("uint64_t", 8, TKIND_UNSIGNED);
+    ADD_BASIC_TYPE("int8_t", 1, TKIND_SIGNED);
+    ADD_BASIC_TYPE("int16_t", 2, TKIND_SIGNED);
+    ADD_BASIC_TYPE("int32_t", 4, TKIND_SIGNED);
+    ADD_BASIC_TYPE("int64_t", 8, TKIND_SIGNED);
+    ADD_BASIC_TYPE("float", 4, TKIND_FLOAT);
+    ADD_BASIC_TYPE("double", 8, TKIND_FLOAT);
+#if __SIZEOF_LONG_DOUBLE__ > __SIZEOF_DOUBLE__
+    ADD_BASIC_TYPE("long double", __SIZEOF_LONG_DOUBLE__, TKIND_FLOAT);
+#endif
+
     return SUCCESS;
 }
 
