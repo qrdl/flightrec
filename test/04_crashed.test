@@ -21,7 +21,7 @@ case "Init" {
 }
 
 case "Launch" {
-    request '{"command":"launch","arguments":{"request":"launch","program":"$(path)/test02","sourcePath":"$(path)","stopOnEntry":true,},"type":"request","seq":2}'
+    request '{"command":"launch","arguments":{"request":"launch","program":"$(path)/test02","sourcePath":"$(path)","stopOnEntry":true},"type":"request","seq":2}'
     # response
     response {
         expect /type == "response"

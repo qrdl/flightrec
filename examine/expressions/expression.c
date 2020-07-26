@@ -53,7 +53,7 @@ static union node_value float_bin_op(struct ast_node *ast, uint64_t step, char *
 static union node_value signed_bin_op(struct ast_node *ast, uint64_t step, char **error);
 static union node_value unsigned_bin_op(struct ast_node *ast, uint64_t step, char **error);
 static union node_value var_value(struct ast_node *ast, uint64_t addr, uint64_t step, char **error);
-static int type_details(uint64_t type_offset, uint64_t *dim, uint64_t *type_kind);
+static int type_details(int64_t type_offset, uint64_t *dim, uint64_t *type_kind);
 
 static void *expr_struct_cursor;
 static void *expr_type_cursor;
@@ -114,7 +114,7 @@ int get_eval_result(JSON_OBJ *container, uint64_t id, struct ast_node *ast, uint
     uint64_t addr, dim, under_kind;
 
     /* get details of underlying type */
-    if (SUCCESS != type_details(ast->type_offset, &dim, &under_kind)) {
+    if (ast->type_offset && SUCCESS != type_details(ast->type_offset, &dim, &under_kind)) {
         *error = "Cannot get type details";
         RETCLEAN(FAILURE);
     }
@@ -289,10 +289,31 @@ union node_value evaluate_node(struct ast_node *ast, uint64_t step, int flags, c
             if (*error) {
                 return (union node_value){ .pointer_value = NULL };
             }
-            uint64_t index = evaluate_node(ast->member, step, FLAG_ADDR, error).unsigned_value;
+            uint64_t index = evaluate_node(ast->member, step, NO_FLAGS, error).unsigned_value;
+            uint64_t dim, size, dummy;
+            int ret = get_type_size(ast->object->type_offset, &size, &dim, &dummy, &dummy);
+            if (SUCCESS == ret) {
+                if (!dim || ast->object->indirect) {
+                    ret = get_pointer_size(addr, &dim);
+                    if (SUCCESS == ret) {
+                        if (dim && index >= dim / size) {   // divide size in bytes by base type size
+                            *error = "Pointer access out of bounds";
+                        }
+                    } else if (MEM_RELEASED == ret) {
+                        *error = "Memory has been already released";
+                    }
+                    // in case of returned error just ignore it - it maybe because address is for array
+                    // which type was casted away so original array dimension isn't known
+                    // TODO: when there is support for var addresses, use it to map address to variable
+                } else if (index >= dim) {
+                    *error = "Array access out of bounds";
+                }
+            } else {
+                *error = "Error getting array size";
+            }
             addr += index * ast->size;
             if (FLAG_ADDR == flags) {
-                return (union node_value){ .unsigned_value = addr};    // parent node needs only address
+                return (union node_value){ .unsigned_value = addr };    // parent node needs only address
             }
             return var_value(ast, addr, step, error);
         case NODE_TYPE_UNARY_OP:
@@ -400,7 +421,12 @@ union node_value evaluate_node(struct ast_node *ast, uint64_t step, int flags, c
             return unsigned_bin_op(ast, step, error);
         case NODE_TYPE_TYPE:
             ;
-            union node_value value = evaluate_node(ast->operand, step, NO_FLAGS, error);
+            union node_value value;
+            if (TKIND_ARRAY == ast->operand->type_kind || TKIND_STRUCT == ast->operand->type_kind || TKIND_UNION == ast->operand->type_kind) {
+                value = evaluate_node(ast->operand, step, FLAG_ADDR, error);
+            } else {
+                value = evaluate_node(ast->operand, step, NO_FLAGS, error);
+            }
             if (*error) {
                 return (union node_value){ .unsigned_value = 0 };
             }
@@ -791,7 +817,7 @@ void free_ast_node(struct ast_node *node) {
  *  Descr:      Find details for given struct/union
  *
  **************************************************************************/
-int get_struct_details(const char *name, uint64_t *offset, int *kind, size_t *size) {
+int get_struct_details(const char *name, int64_t *offset, int *kind, size_t *size) {
     if (!expr_struct_cursor) {
         if (DAB_OK != DAB_CURSOR_OPEN(&expr_struct_cursor,
             "SELECT "
@@ -837,7 +863,7 @@ int get_struct_details(const char *name, uint64_t *offset, int *kind, size_t *si
  *  Descr:      Find details for given non-struct/union type
  *
  **************************************************************************/
-int get_type_details(const char *name, uint64_t *offset, int *kind, size_t *size) {
+int get_type_details(const char *name, int64_t *offset, int *kind, size_t *size) {
     if (!expr_type_cursor) {
         if (DAB_OK != DAB_CURSOR_OPEN(&expr_type_cursor,
             "SELECT "
@@ -890,7 +916,7 @@ int get_type_details(const char *name, uint64_t *offset, int *kind, size_t *size
  *
  **************************************************************************/
 int get_var_details(const char *name, uint64_t scope, uint64_t *var_id,
-                uint64_t *type_offset, int *kind, size_t *size, int *indirect) {
+                int64_t *type_offset, int *kind, size_t *size, int *indirect) {
     if (!expr_var_cursor) {
         if (DAB_OK != DAB_CURSOR_OPEN(&expr_var_cursor,
             "SELECT "
@@ -954,7 +980,7 @@ int get_var_details(const char *name, uint64_t scope, uint64_t *var_id,
  *              field is a pointer, return the type it points to
  *
  **************************************************************************/
-int get_field_details(const char *name, uint64_t type, uint64_t *type_offset,
+int get_field_details(const char *name, int64_t type, int64_t *type_offset,
             int *kind, size_t *size, uint64_t *start, int *indirect) {
     if (!expr_field_cursor) {
         if (DAB_OK != DAB_CURSOR_OPEN(&expr_field_cursor,
@@ -1014,7 +1040,7 @@ int get_field_details(const char *name, uint64_t type, uint64_t *type_offset,
  *  Note:       Return info about the most base type of the type
  *
  **************************************************************************/
-int get_base_type_details(uint64_t offset, uint64_t *type_offset, int *kind, size_t *size, int *indirect) {
+int get_base_type_details(int64_t offset, int64_t *type_offset, int *kind, size_t *size, int *indirect) {
     if (!expr_basetype_cursor) {
         if (DAB_OK != DAB_CURSOR_OPEN(&expr_basetype_cursor,
             "SELECT "
@@ -1188,7 +1214,7 @@ int update_expr_cache(uint64_t id, struct ast_node *ast) {
  *  Descr:      Find details about type
  *
  **************************************************************************/
-int type_details(uint64_t type_offset, uint64_t *dim, uint64_t *type_kind) {
+int type_details(int64_t type_offset, uint64_t *dim, uint64_t *type_kind) {
     if (!expr_typedetails_cursor) {
         if (DAB_OK != DAB_CURSOR_PREPARE(&expr_typedetails_cursor, "SELECT "
                 "t.dim, "

@@ -621,38 +621,16 @@ int add_var_entry(JSON_OBJ *container, int parent_type, ULONG parent, char *name
     char *mem = NULL;
     int ret = SUCCESS;
 
-    if (!type_cursor) {
-        if (DAB_OK != DAB_CURSOR_OPEN(&type_cursor,
-            "SELECT "
-                "size, "
-                "dim, "
-                "flags, "
-                "parent "
-            "FROM "
-                "type "
-            "WHERE "
-                "offset = ?", type
-        )) {
-            return FAILURE;
-        }
-    } else if (DAB_OK != DAB_CURSOR_RESET(type_cursor) || DAB_OK != DAB_CURSOR_BIND(type_cursor, type)) {
-        return FAILURE;
-    }
-
     ULONG size, flags, dim, base_type;
-    if (DAB_OK != DAB_CURSOR_FETCH(type_cursor, &size, &dim, &flags, &base_type)) {
-        ERR("Cannot find type with offset %lx", type);
+    if (SUCCESS != get_type_size(type, &size, &dim, &flags, &base_type)) {
         return FAILURE;
     }
 
     struct sr *tname = type_name(type, indirect);
     while (TKIND_ALIAS == flags) {
-        /* typedef'ed type - drill down to actual type */
         type = base_type;
-        if (    DAB_OK != DAB_CURSOR_RESET(type_cursor) ||
-                DAB_OK != DAB_CURSOR_BIND(type_cursor, base_type) ||
-                DAB_OK != DAB_CURSOR_FETCH(type_cursor, &size, &dim, &flags, &base_type)) {
-            ERR("Cannot find type with offset %lx", base_type);
+        /* typedef'ed type - drill down to actual type */
+        if (SUCCESS != get_type_size(base_type, &size, &dim, &flags, &base_type)) {
             return FAILURE;
         }
     }
@@ -722,10 +700,8 @@ int add_var_entry(JSON_OBJ *container, int parent_type, ULONG parent, char *name
         case TKIND_ARRAY:
             if (!indirect) {
                 /* check parent base type */
-                if (    DAB_OK != DAB_CURSOR_RESET(type_cursor) ||
-                        DAB_OK != DAB_CURSOR_BIND(type_cursor, base_type) ||
-                        DAB_OK != DAB_CURSOR_FETCH(type_cursor, &size, &dummy, &flags)) {   // don't fetch parent type
-                    RETCLEAN(FAILURE);
+                if (SUCCESS != get_type_size(base_type, &size, &dummy, &flags, &dummy)) {
+                    return FAILURE;
                 }
             }
             if (pointer_size) {
@@ -1091,6 +1067,49 @@ int get_pointer_size(ULONG address, ULONG *size) {
 
 /**************************************************************************
  *
+ *  Function:   get_type_size
+ *
+ *  Params:     offset - type offset
+ *              size - where to store size of type memory
+ *              dim - where to store dimension for container type
+ *              flags  - where to store flags
+ *              parent - where to store type's base type
+ *
+ *  Return:     SUCCESS / FAILURE / NOTFOUND
+ *
+ *  Descr:      Look for pointer content regardless of its location
+ *
+ **************************************************************************/
+int get_type_size(int64_t offset, uint64_t *size, uint64_t *dim, uint64_t *flags, uint64_t *base_type) {
+    if (!type_cursor) {
+        if (DAB_OK != DAB_CURSOR_OPEN(&type_cursor,
+            "SELECT "
+                "size, "
+                "dim, "
+                "flags, "
+                "parent "
+            "FROM "
+                "type "
+            "WHERE "
+                "offset = ?", offset
+        )) {
+            return FAILURE;
+        }
+    } else if (DAB_OK != DAB_CURSOR_RESET(type_cursor) || DAB_OK != DAB_CURSOR_BIND(type_cursor, offset)) {
+        return FAILURE;
+    }
+
+    if (DAB_OK != DAB_CURSOR_FETCH(type_cursor, size, dim, flags, base_type)) {
+        ERR("Cannot find type with offset %lx", offset);
+        return FAILURE;
+    }
+
+    return SUCCESS;
+}
+
+
+/**************************************************************************
+ *
  *  Function:   func_name
  *
  *  Params:     address
@@ -1141,7 +1160,7 @@ int func_name(ULONG address, char **name) {
  *  Descr:      Lookup type name by offset
  *
  **************************************************************************/
-struct sr *type_name(ULONG type_offset, int indirect) {
+struct sr *type_name(int64_t type_offset, int indirect) {
     if (!type_name_cursor) {
         if (DAB_OK != DAB_CURSOR_OPEN(&type_name_cursor,
             "WITH RECURSIVE parent_of(name, flags, offset, parent, level) AS ("

@@ -272,6 +272,7 @@ cast_expression
     | '(' type ')' cast_expression {
             /* compare source type and target type to check validity of the case */
             if (    ($2->indirect && $4->indirect) ||                                               // pointer to pointer
+                    ($2->indirect && $4->type_kind == TKIND_ARRAY) ||                               // array to pointer
                     ($2->indirect && IS_NUMERIC($4->type_kind)) ||                                  // integer to pointer
                     ($4->indirect && IS_INTEGER($2->type_kind) && $2->size == sizeof(uint64_t)) ||  // pointer to long int
                     (IS_NUMERIC($2->type_kind) && IS_NUMERIC($4->type_kind))) {                     // number to number, possibly loosing sign and/or precision

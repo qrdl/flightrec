@@ -1,0 +1,275 @@
+# Caller must set $(path)
+start "../examine/fr_examine"
+
+case "Init" {
+    request '{"command":"initialize","arguments":{"clientID":"tester","clientName":"Tester"},"type":"request","seq":1}'
+    # response
+    response {
+        # ignore init response
+    }
+    response {
+        # ignore init done event
+    }
+    # stopOnEntry isn't specified so "execution" is delayed until configurationDone command received
+    request '{"command":"launch","arguments":{"request":"launch","program":"$(path)/test01","sourcePath":"$(path)"},"type":"request","seq":2}'
+    # response
+    response {
+        expect /type == "response"
+        expect /command == launch
+        expect /request_seq == 2
+        expect /success == true
+    }
+    request '{"command":"setBreakpoints","arguments":{"source":{"name":"test01_a.c","path":"$(path)/test01_a.c"},"lines":[57],"breakpoints":[{"line":57}],"sourceModified":false},"type":"request","seq":3}'
+    response {
+        expect /type == "response"
+        expect /command == setBreakpoints
+        expect /request_seq == 3
+        expect /success == true
+
+        expect /body/breakpoints[0]/id == 1
+        expect /body/breakpoints[0]/verified == true
+    }
+    request '{"command":"configurationDone","type":"request","seq":4}'
+    response {
+        expect /type == "response"
+        expect /command == configurationDone
+        expect /request_seq == 4
+        expect /success == true
+    }
+    response {
+        expect /type == event
+        expect /event == stopped
+        expect /body/reason == breakpoint
+    }
+    request '{"command":"stackTrace","arguments":{"threadId":1,"startFrame":0,"levels":20},"type":"request","seq":5}'
+    response {
+        expect /type == "response"
+        expect /command == stackTrace
+        expect /request_seq == 5
+        expect /success == true
+        expect /body/totalFrames == 1
+
+        expect /body/stackFrames[0]/name == main
+        expect /body/stackFrames[0]/id == 0
+        expect /body/stackFrames[0]/line == 57
+        expect /body/stackFrames[0]/column == 0
+        expect /body/stackFrames[0]/source/name == test01_a.c
+        expect /body/stackFrames[0]/source/path == "$(path)/test01_a.c"
+        expect /body/stackFrames[0]/source/sourceReference == 0
+    }
+}
+
+case "Integer variable" {
+    request '{"command":"evaluate","arguments":{"expression":"i","frameId":0,"context":"watch"},"type":"request","seq":6}'
+    response {
+        expect /type == "response"
+        expect /command == evaluate
+        expect /request_seq == 6
+        expect /success == true
+        expect /body/result == "20"     # compare it as string to make sure there is no decimal point
+    }
+}
+
+case "Integer expression with variable" {
+    request '{"command":"evaluate","arguments":{"expression":"((1+i)*100-1000)/10 - ret","frameId":0,"context":"watch"},"type":"request","seq":7}'
+    response {
+        expect /type == "response"
+        expect /command == evaluate
+        expect /request_seq == 7
+        expect /success == true
+        expect /body/result == "110"     # compare it as string to make sure there is no decimal point
+    }
+}
+
+case "Array element" {
+    request '{"command":"evaluate","arguments":{"expression":"garr[1]","frameId":0,"context":"watch"},"type":"request","seq":8}'
+    response {
+        expect /type == "response"
+        expect /command == evaluate
+        expect /request_seq == 8
+        expect /success == true
+        expect /body/result == "1"     # compare it as string to make sure there is no decimal point
+    }
+}
+
+case "Array element with index as expression" {
+    request '{"command":"evaluate","arguments":{"expression":"garr[i/5]","frameId":0,"context":"watch"},"type":"request","seq":9}'
+    response {
+        expect /type == "response"
+        expect /command == evaluate
+        expect /request_seq == 9
+        expect /success == true
+        expect /body/result == "16"     # compare it as string to make sure there is no decimal point
+    }
+}
+
+case "Array element with index out of bounds" {
+    request '{"command":"evaluate","arguments":{"expression":"garr[i]","frameId":0,"context":"watch"},"type":"request","seq":10}'
+    response {
+        expect /type == "response"
+        expect /command == evaluate
+        expect /request_seq == 10
+        expect /success == false
+        expect /message == "Array access out of bounds"
+    }
+}
+
+case "Array of struct" {
+    request '{"command":"evaluate","arguments":{"expression":"bar","frameId":0,"context":"watch"},"type":"request","seq":11}'
+    response {
+        expect /type == "response"
+        expect /command == evaluate
+        expect /request_seq == 11
+        expect /success == true
+        expect /body/result == "struct bar[]"
+        expect /body/indexedVariables == 5
+        set bar_ref = /body/variablesReference
+    }
+    request '{"command":"variables","arguments":{"variablesReference":$(bar_ref), "filter":"indexed", "start": 0, "count": 5 },"type":"request","seq":12}'
+    response {
+        expect /type == "response"
+        expect /command == variables
+        expect /request_seq == 12
+        expect /success == true
+        expect LENGTH(/body/variables) == 5
+
+        expect /body/variables[0]/name == "[0]"
+        expect /body/variables[0]/value == "struct bar"
+
+        expect /body/variables[1]/name == "[1]"
+        expect /body/variables[1]/value == "struct bar"
+
+        expect /body/variables[2]/name == "[2]"
+        expect /body/variables[2]/value == "struct bar"
+
+        expect /body/variables[3]/name == "[3]"
+        expect /body/variables[3]/value == "struct bar"
+
+        expect /body/variables[4]/name == "[4]"
+        expect /body/variables[4]/value == "struct bar"
+    }
+}
+
+case "Item of array of struct" {
+    request '{"command":"evaluate","arguments":{"expression":"bar[0]","frameId":0,"context":"watch"},"type":"request","seq":13}'
+    response {
+        expect /type == "response"
+        expect /command == evaluate
+        expect /request_seq == 13
+        expect /success == true
+        expect /body/result == "struct bar"
+    }
+}
+
+case "Pointer to single struct" {
+    request '{"command":"evaluate","arguments":{"expression":"cur1","frameId":0,"context":"watch"},"type":"request","seq":14}'
+    response {
+        expect /type == "response"
+        expect /command == evaluate
+        expect /request_seq == 14
+        expect /success == true
+        expect /body/result =~ "(struct bar\*)0x[0-9a-f]*"
+        expect /body/indexedVariables == 1
+        set cur1_ref = /body/variablesReference
+    }
+    request '{"command":"variables","arguments":{"variablesReference":$(cur1_ref), "filter":"indexed", "start": 0, "count": 1 },"type":"request","seq":15}'
+    response {
+        expect /type == "response"
+        expect /command == variables
+        expect /request_seq == 15
+        expect /success == true
+
+        expect /body/variables[0]/name == "[0]"
+        expect /body/variables[0]/value == "struct bar"
+    }
+}
+
+case "Pointer to array of struct" {
+    request '{"command":"evaluate","arguments":{"expression":"cur","frameId":0,"context":"watch"},"type":"request","seq":16}'
+    response {
+        expect /type == "response"
+        expect /command == evaluate
+        expect /request_seq == 16
+        expect /success == true
+        expect /body/result =~ "(struct bar\*)0x[0-9a-f]*"
+        expect /body/indexedVariables == 5
+        set cur_ref = /body/variablesReference
+    }
+    request '{"command":"variables","arguments":{"variablesReference":$(cur_ref), "filter":"indexed", "start": 0, "count": 5 },"type":"request","seq":17}'
+    response {
+        expect /type == "response"
+        expect /command == variables
+        expect /request_seq == 17
+        expect /success == true
+        expect LENGTH(/body/variables) == 5
+
+        expect /body/variables[0]/name == "[0]"
+        expect /body/variables[0]/value == "struct bar"
+
+        expect /body/variables[1]/name == "[1]"
+        expect /body/variables[1]/value == "struct bar"
+
+        expect /body/variables[2]/name == "[2]"
+        expect /body/variables[2]/value == "struct bar"
+
+        expect /body/variables[3]/name == "[3]"
+        expect /body/variables[3]/value == "struct bar"
+
+        expect /body/variables[4]/name == "[4]"
+        expect /body/variables[4]/value == "struct bar"
+    }
+}
+
+case "Item of pointer to array of struct" {
+    request '{"command":"evaluate","arguments":{"expression":"cur[0]","frameId":0,"context":"watch"},"type":"request","seq":18}'
+    response {
+        expect /type == "response"
+        expect /command == evaluate
+        expect /request_seq == 18
+        expect /success == true
+        expect /body/result == "struct bar"
+    }
+}
+
+case "Item of pointer to array of struct - out of bounds" {
+    request '{"command":"evaluate","arguments":{"expression":"cur[5]","frameId":0,"context":"watch"},"type":"request","seq":18}'
+    response {
+        expect /type == "response"
+        expect /command == evaluate
+        expect /request_seq == 18
+        expect /success == false
+        expect /message == "Pointer access out of bounds"
+    }
+}
+
+case "Pointer arithmetics + dereference" {
+    request '{"command":"evaluate","arguments":{"expression":"*(cur+1)","frameId":0,"context":"watch"},"type":"request","seq":19}'
+    response {
+        expect /type == "response"
+        expect /command == evaluate
+        expect /request_seq == 19
+        expect /success == true
+        expect /body/result == "struct bar"
+        set cur1_ref = /body/variablesReference
+    }
+    request '{"command":"variables","arguments":{"variablesReference":$(cur1_ref) },"type":"request","seq":20}'
+    response {
+        expect /type == "response"
+        expect /command == variables
+        expect /request_seq == 20
+        expect /success == true
+        expect LENGTH(/body/variables) == 2
+
+        expect /body/variables[0]/name == "a"
+        expect /body/variables[0]/variablesReference == 0
+        expect /body/variables[0]/value == 1
+
+        expect /body/variables[1]/name == "b"
+        expect /body/variables[1]/variablesReference == 0
+        expect /body/variables[1]/value == 1.01
+    }
+
+}
+
+
+stop

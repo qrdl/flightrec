@@ -56,6 +56,7 @@ static int find_struct_or_union(char *name);
 static int find_var_or_type(char *name);
 static char decode_char(char *source, int *consumed);
 static char *decode_string(char *source);
+static void set_basic_type(int type, size_t size);
 %}
 
 %%
@@ -66,30 +67,30 @@ static char *decode_string(char *source);
 "struct"{S}+{L}({L}|{D})*   { return find_struct_or_union(ltrim(yytext+sizeof("struct")-1)); }
 "union"{S}+{L}({L}|{D})*    { return find_struct_or_union(ltrim(yytext+sizeof("union")-1)); }
 
-"float" { yylval.ast = new_ast_node(NODE_TYPE_TYPE); yylval.ast->type_kind = TKIND_FLOAT; yylval.ast->size = sizeof(float); return(TYPE); }
-"double" { yylval.ast = new_ast_node(NODE_TYPE_TYPE); yylval.ast->type_kind = TKIND_FLOAT; yylval.ast->size = sizeof(double); return(TYPE); }
-"long double" { yylval.ast = new_ast_node(NODE_TYPE_TYPE); yylval.ast->type_kind = TKIND_FLOAT; yylval.ast->size = sizeof(long double); return(TYPE); }
+"float" { yylval.ast = new_ast_node(NODE_TYPE_TYPE); set_basic_type(TKIND_FLOAT, sizeof(float)); return(TYPE); }
+"double" { yylval.ast = new_ast_node(NODE_TYPE_TYPE); set_basic_type(TKIND_FLOAT, sizeof(double)); return(TYPE); }
+"long double" { yylval.ast = new_ast_node(NODE_TYPE_TYPE); set_basic_type(TKIND_FLOAT, sizeof(long double)); return(TYPE); }
 
-"unsigned"{S}+"long"{S}+"long"({S}+"int")? { yylval.ast = new_ast_node(NODE_TYPE_TYPE); yylval.ast->type_kind = TKIND_UNSIGNED; yylval.ast->size = sizeof(unsigned long long); return(TYPE); }
-"unsigned"{S}+"long"({S}+"int")? { yylval.ast = new_ast_node(NODE_TYPE_TYPE); yylval.ast->type_kind = TKIND_UNSIGNED; yylval.ast->size = sizeof(unsigned long); return(TYPE); }
-"unsigned"{S}+"short"({S}+"int")? { yylval.ast = new_ast_node(NODE_TYPE_TYPE); yylval.ast->type_kind = TKIND_UNSIGNED; yylval.ast->size = sizeof(unsigned short); return(TYPE); }
-"unsigned"{S}+"char" { yylval.ast = new_ast_node(NODE_TYPE_TYPE); yylval.ast->type_kind = TKIND_UNSIGNED; yylval.ast->size = 1; return(TYPE); }
-"unsigned"({S}+"int")? { yylval.ast = new_ast_node(NODE_TYPE_TYPE); yylval.ast->type_kind = TKIND_UNSIGNED; yylval.ast->size = sizeof(unsigned int); return(TYPE); }
-"uint64_t" { yylval.ast = new_ast_node(NODE_TYPE_TYPE); yylval.ast->type_kind = TKIND_UNSIGNED; yylval.ast->size = sizeof(uint64_t); return(TYPE); }
-"uint32_t" { yylval.ast = new_ast_node(NODE_TYPE_TYPE); yylval.ast->type_kind = TKIND_UNSIGNED; yylval.ast->size = sizeof(uint32_t); return(TYPE); }
-"uint16_t" { yylval.ast = new_ast_node(NODE_TYPE_TYPE); yylval.ast->type_kind = TKIND_UNSIGNED; yylval.ast->size = sizeof(uint16_t); return(TYPE); }
-"uint8_t" { yylval.ast = new_ast_node(NODE_TYPE_TYPE); yylval.ast->type_kind = TKIND_UNSIGNED; yylval.ast->size = sizeof(uint8_t); return(TYPE); }
+"unsigned"{S}+"long"{S}+"long"({S}+"int")? { yylval.ast = new_ast_node(NODE_TYPE_TYPE); set_basic_type(TKIND_UNSIGNED, sizeof(unsigned long long)); return(TYPE); }
+"unsigned"{S}+"long"({S}+"int")? { yylval.ast = new_ast_node(NODE_TYPE_TYPE); set_basic_type(TKIND_UNSIGNED, sizeof(unsigned long)); return(TYPE); }
+"unsigned"{S}+"short"({S}+"int")? { yylval.ast = new_ast_node(NODE_TYPE_TYPE); set_basic_type(TKIND_UNSIGNED, sizeof(unsigned short)); return(TYPE); }
+"unsigned"{S}+"char" { yylval.ast = new_ast_node(NODE_TYPE_TYPE); set_basic_type(TKIND_UNSIGNED, 1); return(TYPE); }
+"unsigned"({S}+"int")? { yylval.ast = new_ast_node(NODE_TYPE_TYPE); set_basic_type(TKIND_UNSIGNED, sizeof(unsigned int)); return(TYPE); }
+"uint64_t" { yylval.ast = new_ast_node(NODE_TYPE_TYPE); set_basic_type(TKIND_UNSIGNED, sizeof(uint64_t)); return(TYPE); }
+"uint32_t" { yylval.ast = new_ast_node(NODE_TYPE_TYPE); set_basic_type(TKIND_UNSIGNED, sizeof(uint32_t)); return(TYPE); }
+"uint16_t" { yylval.ast = new_ast_node(NODE_TYPE_TYPE); set_basic_type(TKIND_UNSIGNED, sizeof(uint16_t)); return(TYPE); }
+"uint8_t" { yylval.ast = new_ast_node(NODE_TYPE_TYPE); set_basic_type(TKIND_UNSIGNED, sizeof(uint8_t)); return(TYPE); }
 
-("signed"{S}+)?"long"{S}+"long"({S}+"int")? { yylval.ast = new_ast_node(NODE_TYPE_TYPE); yylval.ast->type_kind = TKIND_SIGNED; yylval.ast->size = sizeof(signed long long); return(TYPE); }
-("signed"{S}+)?"long"({S}+"int")? { yylval.ast = new_ast_node(NODE_TYPE_TYPE); yylval.ast->type_kind = TKIND_SIGNED; yylval.ast->size = sizeof(signed long); return(TYPE); }
-("signed"{S}+)?"int" { yylval.ast = new_ast_node(NODE_TYPE_TYPE); yylval.ast->type_kind = TKIND_SIGNED; yylval.ast->size = sizeof(signed int); return(TYPE); }
-("signed"{S}+)?"short"({S}+"int")? { yylval.ast = new_ast_node(NODE_TYPE_TYPE); yylval.ast->type_kind = TKIND_SIGNED; yylval.ast->size = sizeof(signed short); return(TYPE); }
-("signed"{S}+)?"char" { yylval.ast = new_ast_node(NODE_TYPE_TYPE); yylval.ast->type_kind = TKIND_SIGNED; yylval.ast->size = 1; return(TYPE); }
-"signed" { yylval.ast = new_ast_node(NODE_TYPE_TYPE); yylval.ast->type_kind = TKIND_SIGNED; yylval.ast->size = sizeof(signed int); return(TYPE); }
-"int64_t" { yylval.ast = new_ast_node(NODE_TYPE_TYPE); yylval.ast->type_kind = TKIND_SIGNED; yylval.ast->size = sizeof(int64_t); return(TYPE); }
-"int32_t" { yylval.ast = new_ast_node(NODE_TYPE_TYPE); yylval.ast->type_kind = TKIND_SIGNED; yylval.ast->size = sizeof(int32_t); return(TYPE); }
-"int16_t" { yylval.ast = new_ast_node(NODE_TYPE_TYPE); yylval.ast->type_kind = TKIND_SIGNED; yylval.ast->size = sizeof(int16_t); return(TYPE); }
-"int8_t" { yylval.ast = new_ast_node(NODE_TYPE_TYPE); yylval.ast->type_kind = TKIND_SIGNED; yylval.ast->size = 1; return(TYPE); }
+("signed"{S}+)?"long"{S}+"long"({S}+"int")? { yylval.ast = new_ast_node(NODE_TYPE_TYPE); set_basic_type(TKIND_SIGNED, sizeof(signed long long)); return(TYPE); }
+("signed"{S}+)?"long"({S}+"int")? { yylval.ast = new_ast_node(NODE_TYPE_TYPE); set_basic_type(TKIND_SIGNED, sizeof(signed long)); return(TYPE); }
+("signed"{S}+)?"int" { yylval.ast = new_ast_node(NODE_TYPE_TYPE); set_basic_type(TKIND_SIGNED, sizeof(signed int)); return(TYPE); }
+("signed"{S}+)?"short"({S}+"int")? { yylval.ast = new_ast_node(NODE_TYPE_TYPE); set_basic_type(TKIND_SIGNED, sizeof(signed short)); return(TYPE); }
+("signed"{S}+)?"char" { yylval.ast = new_ast_node(NODE_TYPE_TYPE); set_basic_type(TKIND_SIGNED, 1); return(TYPE); }
+"signed" { yylval.ast = new_ast_node(NODE_TYPE_TYPE); set_basic_type(TKIND_SIGNED, sizeof(signed int)); return(TYPE); }
+"int64_t" { yylval.ast = new_ast_node(NODE_TYPE_TYPE); set_basic_type(TKIND_SIGNED, sizeof(int64_t)); return(TYPE); }
+"int32_t" { yylval.ast = new_ast_node(NODE_TYPE_TYPE); set_basic_type(TKIND_SIGNED, sizeof(int32_t)); return(TYPE); }
+"int16_t" { yylval.ast = new_ast_node(NODE_TYPE_TYPE); set_basic_type(TKIND_SIGNED, sizeof(int16_t)); return(TYPE); }
+"int8_t" { yylval.ast = new_ast_node(NODE_TYPE_TYPE); set_basic_type(TKIND_SIGNED, 1); return(TYPE); }
 
 0[xX]{H}+{IS}?              { yylval.ast = new_ast_node(NODE_TYPE_INT); yylval.ast->type_kind = TKIND_SIGNED; yylval.ast->size = sizeof(int64_t); yylval.ast->int_value = strtol(yytext, NULL, 16); return(CONSTANT); }
 0{O}*{IS}?                  { yylval.ast = new_ast_node(NODE_TYPE_INT); yylval.ast->type_kind = TKIND_SIGNED; yylval.ast->size = sizeof(int64_t); yylval.ast->int_value = strtol(yytext, NULL, 8); return(CONSTANT); }
@@ -240,4 +241,11 @@ char *decode_string(char *source) {
     }
     *target = '\0';
     return target;
+}
+
+void set_basic_type(int type, size_t size) {
+    yylval.ast->type_kind = type;
+    yylval.ast->size = size;
+    // set dummy type offset for built-in type - 'record' should add entries to DB for these types
+    yylval.ast->type_offset = -1 * ((size << 8) + type);
 }
