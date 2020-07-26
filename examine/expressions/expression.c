@@ -93,10 +93,18 @@ int get_eval_result(JSON_OBJ *container, uint64_t id, struct ast_node *ast, uint
         char value[32];
         switch (ast->type_kind) {
             case TKIND_SIGNED:
-                sprintf(value, "%" PRId64, res.signed_value);
+                if (ast->size == 1) {
+                    sprintf(value, "%" PRId64 " '%c'", res.signed_value, (signed char)res.signed_value);
+                } else {
+                    sprintf(value, "%" PRId64, res.signed_value);
+                }
                 break;
             case TKIND_UNSIGNED:
-                sprintf(value, "%" PRIu64, res.unsigned_value);
+                if (ast->size == 1) {
+                    sprintf(value, "%" PRIu64 " '%c'", res.unsigned_value, (unsigned char)res.unsigned_value);
+                } else {
+                    sprintf(value, "%" PRIu64, res.unsigned_value);
+                }
                 break;
             case TKIND_FLOAT:
                 sprintf(value, "%lf", res.float_value);
@@ -380,9 +388,9 @@ union node_value evaluate_node(struct ast_node *ast, uint64_t step, int flags, c
             if (OP_AND == ast->op_code || OP_OR == ast->op_code) {
                 int left;
                 if (TKIND_FLOAT == ast->left->type_kind) {
-                    left = (0 == evaluate_node(ast->left, step, NO_FLAGS, error).float_value);
+                    left = (0 != evaluate_node(ast->left, step, NO_FLAGS, error).float_value);
                 } else {
-                    left = (0 == evaluate_node(ast->left, step, NO_FLAGS, error).unsigned_value);
+                    left = (0 != evaluate_node(ast->left, step, NO_FLAGS, error).unsigned_value);
                 }
                 if (*error) {
                     return (union node_value){ .unsigned_value = 0 };
@@ -396,9 +404,9 @@ union node_value evaluate_node(struct ast_node *ast, uint64_t step, int flags, c
                 }
                 int right;
                 if (TKIND_FLOAT == ast->right->type_kind) {
-                    right = (0 == evaluate_node(ast->right, step, NO_FLAGS, error).float_value);
+                    right = (0 != evaluate_node(ast->right, step, NO_FLAGS, error).float_value);
                 } else {
-                    right = (0 == evaluate_node(ast->right, step, NO_FLAGS, error).unsigned_value);
+                    right = (0 != evaluate_node(ast->right, step, NO_FLAGS, error).unsigned_value);
                 }
                 if (*error) {
                     return (union node_value){ .unsigned_value = 0 };
@@ -413,7 +421,7 @@ union node_value evaluate_node(struct ast_node *ast, uint64_t step, int flags, c
             if (TKIND_FLOAT == ast->type_kind) {
                 /* op with float operands */
                 return float_bin_op(ast, step, error);
-            } else if (TKIND_SIGNED == ast->type_kind) {
+            } else if (TKIND_SIGNED == ast->left->type_kind || TKIND_SIGNED == ast->right->type_kind) {
                 /* op with signed operands */
                 return signed_bin_op(ast, step, error);
             }
@@ -1218,7 +1226,7 @@ int type_details(int64_t type_offset, uint64_t *dim, uint64_t *type_kind) {
     if (!expr_typedetails_cursor) {
         if (DAB_OK != DAB_CURSOR_PREPARE(&expr_typedetails_cursor, "SELECT "
                 "t.dim, "
-                "p.flags & " STR(TKIND_TYPE) " "
+                "IFNULL(p.flags & " STR(TKIND_TYPE) ", t.size) "
             "FROM "
                 "type t "
                 "LEFT JOIN type p ON p.offset = t.parent "

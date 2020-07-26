@@ -268,8 +268,116 @@ case "Pointer arithmetics + dereference" {
         expect /body/variables[1]/variablesReference == 0
         expect /body/variables[1]/value == 1.01
     }
-
 }
 
+case "Cast array to pointer and dereference" {
+    request '{"command":"evaluate","arguments":{"expression":"*(int*)garr","frameId":0,"context":"watch"},"type":"request","seq":20}'
+    response {
+        expect /type == "response"
+        expect /command == evaluate
+        expect /request_seq == 20
+        expect /success == true
+        expect /body/result == "1764"
+    }
+}
+
+case "Cast array to pointer and get first item" {
+    request '{"command":"evaluate","arguments":{"expression":"((int*)garr)[0]","frameId":0,"context":"watch"},"type":"request","seq":21}'
+    response {
+        expect /type == "response"
+        expect /command == evaluate
+        expect /request_seq == 21
+        expect /success == true
+        expect /body/result == "1764"
+    }
+}
+
+case "String (char array)" {
+    request '{"command":"evaluate","arguments":{"expression":"qwe","frameId":0,"context":"watch"},"type":"request","seq":22}'
+    response {
+        expect /type == "response"
+        expect /command == evaluate
+        expect /request_seq == 22
+        expect /success == true
+        expect /body/result =~ '0x[a-z0-9]* "     56789abcdefghijklmopqrstuvw…"'
+    }
+}
+
+case "String character" {
+    request '{"command":"evaluate","arguments":{"expression":"qwe[10]","frameId":0,"context":"watch"},"type":"request","seq":23}'
+    response {
+        expect /type == "response"
+        expect /command == evaluate
+        expect /request_seq == 23
+        expect /success == true
+        expect /body/result == "97 'a'"
+    }
+}
+
+case "String starting from specified index" {
+    request '{"command":"evaluate","arguments":{"expression":"(char *)qwe+10","frameId":0,"context":"watch"},"type":"request","seq":24}'
+    response {
+        expect /type == "response"
+        expect /command == evaluate
+        expect /request_seq == 24
+        expect /success == true
+        expect /body/result =~ '0x[a-z0-9]* "abcdefghijklmopqrstuvwxyz"'
+    }
+}
+
+case "Logical expression with AND" {
+    request '{"command":"evaluate","arguments":{"expression":"((1 && 1) << 3) + ((1 && 0) << 2) + ((0 && 1) << 1) + (0 && 0)","frameId":0,"context":"watch"},"type":"request","seq":25}'
+    response {
+        expect /type == "response"
+        expect /command == evaluate
+        expect /request_seq == 25
+        expect /success == true
+        expect /body/result == 8
+    }
+}
+
+case "Logical expression with OR" {
+    request '{"command":"evaluate","arguments":{"expression":"((1 || 1) << 3) + ((1 || 0) << 2) + ((0 || 1) << 1) + (0 || 0)","frameId":0,"context":"watch"},"type":"request","seq":26}'
+    response {
+        expect /type == "response"
+        expect /command == evaluate
+        expect /request_seq == 26
+        expect /success == true
+        expect /body/result == 14
+    }
+}
+
+case "Bitwise AND with binary numbers" {
+    request '{"command":"evaluate","arguments":{"expression":"0b1100 & 0b1010","frameId":0,"context":"watch"},"type":"request","seq":27}'
+    response {
+        expect /type == "response"
+        expect /command == evaluate
+        expect /request_seq == 27
+        expect /success == true
+        expect /body/result == 8
+    }
+}
+
+case "Bitwise OR with hex numbers" {
+    request '{"command":"evaluate","arguments":{"expression":"0x0C | 0x0A","frameId":0,"context":"watch"},"type":"request","seq":28}'
+    response {
+        expect /type == "response"
+        expect /command == evaluate
+        expect /request_seq == 28
+        expect /success == true
+        expect /body/result == 14
+    }
+}
+
+case "Logical expression with numeric comparison" {
+    request '{"command":"evaluate","arguments":{"expression":"ret > -1 && ret < 1 && ret == 0","frameId":0,"context":"watch"},"type":"request","seq":29}'
+    response {
+        expect /type == "response"
+        expect /command == evaluate
+        expect /request_seq == 29
+        expect /success == true
+        expect /body/result == 1
+    }
+}
 
 stop
