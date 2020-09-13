@@ -76,11 +76,11 @@ case "Get globals (must be NULLs)" {
         # interested just in first two vars
         expect /body/variables[0]/name == gint
         expect /body/variables[0]/variablesReference == 0
-        expect /body/variables[0]/value == NULL
+        expect /body/variables[0]/value == "(int*)NULL"
 
         expect /body/variables[1]/name == gdbl
         expect /body/variables[1]/variablesReference == 0
-        expect /body/variables[1]/value == NULL
+        expect /body/variables[1]/value == "(double*)NULL"
     }
 }
 

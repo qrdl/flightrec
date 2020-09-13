@@ -86,6 +86,8 @@ static int get_location(Dwarf_Attribute attrib, REG_TYPE pc, LLONG base_addr, st
 static int add_var_entry(JSON_OBJ *container, int parent_type, ULONG parent, char *name, ULONG addr,
                         ULONG type, int indirect);
 static int func_name(ULONG address, char **name);
+int format_var(ULONG addr, ULONG type, int indirect, ULONG type_flags, ULONG type_size, 
+               char **value, int *indexed, int *named, ULONG *ref_addr, ULONG *ref_type);
 
 
 /**************************************************************************
@@ -279,6 +281,371 @@ cleanup:
     if (die) {
         dwarf_dealloc(dbg, die, DW_DLA_DIE);
     }
+
+    return ret;
+}
+
+
+/**************************************************************************
+ *
+ *  Function:   add_var_entry
+ *
+ *  Params:     container - JSON object to add var details to
+ *              parent_type - type of parent reference, one of PTYPE_XXX
+ *              parent - parent reference
+ *              name - var name
+ *              addr - var address
+ *              type - type offset
+ *
+ *  Return:     allocated buffer (need to be freed) / NULL on error
+ *
+ *  Descr:      Add variable to JSON object
+ *
+ **************************************************************************/
+int add_var_entry(JSON_OBJ *container, int parent_type, ULONG parent, char *name, ULONG addr,
+                    ULONG type, int indirect) {
+    char *value = NULL;
+    int indexed, named;
+
+    int ret = format_var(addr, type, indirect, 0, 0, &value, &indexed, &named, &addr, &type);
+    if (SUCCESS == ret) {
+        JSON_OBJ *item = JSON_ADD_NEW_ITEM(container);
+        JSON_NEW_STRING_FIELD(item, "name", name);
+        JSON_NEW_STRING_FIELD(item, "value", value);
+        free(value);
+        if (indexed || named) {
+            ULONG ref;
+            if (SUCCESS != get_var_ref(parent_type, parent, name, addr, type, indirect, &ref)) {
+                return FAILURE;
+            }
+            JSON_NEW_INT64_FIELD(item, "variablesReference", ref);
+            if (indexed) {
+                JSON_NEW_INT64_FIELD(item, "indexedVariables", indexed);
+            } else {
+                JSON_NEW_INT64_FIELD(item, "namedVariables", named);
+            }
+        } else {
+            JSON_NEW_INT64_FIELD(item, "variablesReference", 0);
+        }
+    }
+
+    return ret;
+}
+
+
+/**************************************************************************
+ *
+ *  Function:   format_var
+ *
+ *  Params IN:  addr - var address
+ *              type - type offset (can be 0 for standard types)
+ *              indirect - number of indirections
+ *              type_flags - TKIND_XXX flags for types, used only when type
+ *                           is 0
+ *              type_size - size of type, used only when type is 0
+ *  Params OUT: value - value to display
+ *              indexed - number of indexed items (only if complex var)
+ *              named - number of named items (only if complex var)
+ *              ref_addr - address to use for reference
+ *
+ *  Return:     SUCCESS / FAILURE
+ *
+ *  Descr:      Format variable according to type
+ *
+ **************************************************************************/
+int format_var(ULONG addr, ULONG type, int indirect, ULONG type_flags, ULONG type_size, 
+               char **value, int *indexed, int *named, ULONG *ref_addr, ULONG *ref_type) {
+    char *mem = NULL;
+    int ret = SUCCESS;
+    ULONG dim = 0, base_type = 0;
+    struct sr *tname = NULL;
+
+    *named = 0;
+    *indexed = 0;
+    *value = NULL;
+
+    if (type) {
+        /* specified type offset - get other type attributes from debug info */
+        if (SUCCESS != get_type_size(type, &type_size, &dim, &type_flags, &base_type)) {
+            return FAILURE;
+        }
+
+        tname = type_name(type, indirect);
+        while (TKIND_ALIAS == type_flags) {
+            type = base_type;
+            /* typedef'ed type - drill down to actual type */
+            if (SUCCESS != get_type_size(base_type, &type_size, &dim, &type_flags, &base_type)) {
+                return FAILURE;
+            }
+        }
+    } else {
+        // TODO: Fill tname for basic type
+    }
+    *ref_type = type;
+
+    /* format variable value for basic types */
+    char new_val[64];
+    ULONG pointer_size = 0;
+    ULONG dummy, field_count = 0;
+
+    // hack to force pointer processing
+    int org_flags = type_flags;
+    if (indirect) {
+        type_flags = TKIND_POINTER;
+    }
+    switch (type_flags & TKIND_TYPE) {
+        /* container type */
+        case TKIND_STRUCT:  /* FALLTHROUGH */
+        case TKIND_UNION:
+            *named = dim;
+            *value = strdup(CSTR(tname));
+            RETCLEAN(SUCCESS);
+
+        /* array/pointer type */
+        case TKIND_POINTER:
+            type_flags = org_flags;
+            mem = get_var_value(addr, type_size, cur_step);
+            if (!mem) {
+                RETCLEAN(FAILURE);
+            }
+            addr = *(ULONG *)mem;
+            *ref_addr = addr;
+            free(mem);
+            char tmp[32];
+            if (0 == addr) {
+                sprintf(tmp, "(%s)NULL", CSTR(tname));
+                *value = strdup(tmp);
+                RETCLEAN(SUCCESS);
+            }
+            int ret = get_pointer_size(addr, &pointer_size);
+            if (MEM_RELEASED == ret) {
+                sprintf(tmp, "(%s)0x%" PRIx64 " (dangling)", CSTR(tname), addr);
+                *value = strdup(tmp);
+                RETCLEAN(SUCCESS);
+            } else if (MEM_NOTFOUND == ret) {
+                sprintf(tmp, "(%s)0x%" PRIx64 " (invalid)", CSTR(tname), addr);
+                *value = strdup(tmp);
+                RETCLEAN(SUCCESS);
+            } else if (SUCCESS != ret) {
+                RETCLEAN(FAILURE);
+            }
+            sprintf(tmp, "(%s)0x%" PRIx64, CSTR(tname), addr);
+            *value = strdup(tmp);
+            if (!pointer_size) {
+                dim = 1;
+            }
+            /* FALLTHROUGH - process pointer as array */
+        case TKIND_ARRAY:
+            if (!indirect) {
+                /* check parent base type */
+                if (SUCCESS != get_type_size(base_type, &type_size, &field_count, &type_flags, &dummy)) {
+                    return FAILURE;
+                }
+            }
+            if (pointer_size) {
+                dim = pointer_size / type_size;      // number of base type elements in allocated pointer
+            }
+
+            /* function pointer - normally it must be in pointer processing but I moved it here
+               to be after query to base type */
+            if (TKIND_FUNC == (type_flags & TKIND_TYPE)) {
+                /* process function pointer - find function name */
+                char *fun_name;
+                if (SUCCESS != func_name(addr, &fun_name)) {
+                    *value = malloc(32);
+                    sprintf(*value, "0x%" PRIx64 " (invalid)", addr);
+                } else {
+                    *value = malloc(strlen(fun_name) + 32);
+                    sprintf(*value, "0x%" PRIx64 " <%s>", addr, fun_name);
+                    free(fun_name);
+                }
+                RETCLEAN(SUCCESS);
+            }
+
+            if (type_size == 1 && (TKIND_SIGNED == (type_flags & TKIND_TYPE) || TKIND_UNSIGNED == (type_flags & TKIND_TYPE))) {
+                /* treat char pointer as string */
+                if (!pointer_size) {
+                    // string of unknown length, get first few characters
+                    dim = 32;
+                }
+                /* treat char pointer/array as string */
+                mem = get_var_value(addr, dim, cur_step);
+                if (!mem) {
+                    RETCLEAN(FAILURE);
+                }
+                size_t len = strnlen(mem, dim);
+                *value = malloc(len + 32);
+                if (len == dim) {
+                    /* string is not 0-terminated or longer then limit */
+                    mem[dim] = '\0';   // mem has one extra byte for terminator
+                    sprintf(*value, "0x%" PRIx64 " \"%s…\"", addr, mem);
+                } else {
+                    sprintf(*value, "0x%" PRIx64 " \"%s\"", addr, mem);
+                }
+                free(mem);
+                /* TODO sanitise mem to be a valid JSON string */
+                RETCLEAN(SUCCESS);
+            }
+            /* for non-array pointer to struct/union add reference not to first (and only) item, but to struct itself */
+            if (dim == 1 && (TKIND_STRUCT == (type_flags & TKIND_TYPE) || TKIND_UNION == (type_flags & TKIND_TYPE))) {
+                if (!field_count) {
+                    if (SUCCESS != get_type_size(base_type, &type_size, &field_count, &type_flags, &dummy)) {
+                        return FAILURE;
+                    }
+                }
+                *ref_type = base_type;
+                *named = field_count;
+                // TODO: Add namedVariables with number of struct fields
+            } else {
+                *indexed = dim;
+            }
+            
+            if (!*value) {      // add value with type, if not added by pointer code above
+                *value = strdup(CSTR(tname));
+            }
+            RETCLEAN(SUCCESS);
+
+        /* basic types */
+        case TKIND_SIGNED:
+            mem = get_var_value(addr, type_size, cur_step);
+            if (!mem) {
+                RETCLEAN(FAILURE);
+            }
+            switch (type_size) {
+                case 1:
+                    if (isprint(*(int8_t *)mem)) {
+                        sprintf(new_val, "%" PRId8 " '%c'", *(int8_t *)mem, *(int8_t *)mem);
+                    } else {
+                        sprintf(new_val, "%" PRId8, *(int8_t *)mem);
+                    }
+                    break;
+                case 2:
+                    sprintf(new_val, "%" PRId16, *(int16_t *)mem);
+                    break;
+                case 4:
+                    sprintf(new_val, "%" PRId32, *(int32_t *)mem);
+                    break;
+                case 8:
+                    sprintf(new_val, "%" PRId64, *(int64_t *)mem);
+                    break;
+                default:
+                    ERR("Unsupported %" PRId64 "-byte long integer", type_size);
+                    strcpy(new_val, "unsupported");
+                    break;
+            }
+            break;
+        case TKIND_UNSIGNED:
+            mem = get_var_value(addr, type_size, cur_step);
+            if (!mem) {
+                RETCLEAN(FAILURE);
+            }
+            switch (type_size) {
+                case 1:
+                    if (isprint(*(uint8_t *)mem)) {
+                        sprintf(new_val, "%" PRIu8 " '%c'", *(uint8_t *)mem, *(uint8_t *)mem);
+                    } else {
+                        sprintf(new_val, "%" PRIu8, *(uint8_t *)mem);
+                    }
+                    break;
+                case 2:
+                    sprintf(new_val, "%" PRIu16, *(uint16_t *)mem);
+                    break;
+                case 4:
+                    sprintf(new_val, "%" PRIu32, *(uint32_t *)mem);
+                    break;
+                case 8:
+                    sprintf(new_val, "%" PRIu64, *(uint64_t *)mem);
+                    break;
+                default:
+                    ERR("Unsupported %" PRId64 "-byte unsigned long integer", type_size);
+                    strcpy(new_val, "unsupported");
+                    break;
+            }
+            break;
+        case TKIND_FLOAT:
+            mem = get_var_value(addr, type_size, cur_step);
+            if (!mem) {
+                RETCLEAN(FAILURE);
+            }
+            switch (type_size) {
+                case __SIZEOF_FLOAT__:
+                    sprintf(new_val, "%g", *(float *)mem);
+                    break;
+                case __SIZEOF_DOUBLE__:
+                    sprintf(new_val, "%lg", *(double *)mem);
+                    break;
+#if __SIZEOF_LONG_DOUBLE__ > __SIZEOF_DOUBLE__      // to avoid compile error with equal cases
+                case __SIZEOF_LONG_DOUBLE__:
+                    sprintf(new_val, "%Lg", *(long double *)mem);
+                    break;
+#endif
+                default:
+                    ERR("Unsupported %" PRId64 "-byte long float", type_size);
+                    strcpy(new_val, "unsupported");
+                    break;
+            }
+            break;
+        case TKIND_ENUM:
+            mem = get_var_value(addr, type_size, cur_step);
+            if (!mem) {
+                RETCLEAN(FAILURE);
+            }
+            uint32_t value = 0;
+            new_val[0] = '\0';
+            switch (type_size) {
+                case 1:
+                    value = *(uint8_t *)mem;
+                    break;
+                case 2:
+                    value = *(uint16_t *)mem;
+                    break;
+                case 4:
+                    value = *(uint32_t *)mem;
+                    break;
+                default:
+                    ERR("Unsupported %" PRId64 "-byte long enum", type_size);
+                    strcpy(new_val, "unsupported");
+                    break;
+            }
+            if (new_val[0]) {
+                break;
+            }
+            /* lookup enum item name by value */
+            if (!enum_cursor) {
+                if (DAB_OK != DAB_CURSOR_OPEN(&enum_cursor,
+                    "SELECT "
+                        "name "
+                    "FROM "
+                        "member "
+                    "WHERE "
+                        "offset = ? AND "
+                        "value = ?",
+                        type, value
+                )) {
+                    free(mem);
+                    RETCLEAN(FAILURE);
+                }
+            } else if (DAB_OK != DAB_CURSOR_RESET(enum_cursor) || DAB_OK != DAB_CURSOR_BIND(enum_cursor, type, value)) {
+                free(mem);
+                RETCLEAN(FAILURE);
+            }
+            char *item_name;
+            if (DAB_OK != DAB_CURSOR_FETCH(enum_cursor, &item_name)) {
+                sprintf(new_val, "%" PRIu32, value);
+            } else {
+                sprintf(new_val, "%s (%" PRIu32 ")", item_name, value);
+            }          
+            break;
+        default:
+            ERR("Type %" PRIu64 " not implemented yet", type_flags & TKIND_TYPE);
+            strcpy(new_val, "unsupported");
+            break;
+    }
+    *value = strdup(new_val);
+    free(mem);
+
+cleanup:
+    STRFREE(tname);
 
     return ret;
 }
@@ -597,325 +964,6 @@ char *get_var_value(ULONG addr, size_t size, uint64_t step) {
     }
 
     return buffer;
-}
-
-
-/**************************************************************************
- *
- *  Function:   add_var_entry
- *
- *  Params:     container - JSON object to add var details to
- *              parent_type - type of parent reference, one of PTYPE_XXX
- *              parent - parent reference
- *              name - var name
- *              addr - var address
- *              type - type offset
- *
- *  Return:     allocated buffer (need to be freed) / NULL on error
- *
- *  Descr:      Get memory content for the specified address
- *
- **************************************************************************/
-int add_var_entry(JSON_OBJ *container, int parent_type, ULONG parent, char *name, ULONG addr,
-                    ULONG type, int indirect) {
-    char *mem = NULL;
-    int ret = SUCCESS;
-
-    ULONG size, flags, dim, base_type;
-    if (SUCCESS != get_type_size(type, &size, &dim, &flags, &base_type)) {
-        return FAILURE;
-    }
-
-    struct sr *tname = type_name(type, indirect);
-    while (TKIND_ALIAS == flags) {
-        type = base_type;
-        /* typedef'ed type - drill down to actual type */
-        if (SUCCESS != get_type_size(base_type, &size, &dim, &flags, &base_type)) {
-            return FAILURE;
-        }
-    }
-
-    JSON_OBJ *item = JSON_ADD_NEW_ITEM(container);
-    JSON_NEW_STRING_FIELD(item, "name", name);
-
-    /* format variable value for basic types */
-    char new_val[64];
-    ULONG ref;
-    ULONG pointer_size = 0;
-    ULONG dummy;   
-    int value_added = 0;
-
-    // hack to force pointer processing
-    int org_flags = flags;
-    if (indirect) {
-        flags = TKIND_POINTER;
-    }
-    switch (flags & TKIND_TYPE) {
-        case TKIND_STRUCT:  /* FALLTHROUGH */
-        case TKIND_UNION:
-            /* process compound variable by adding the reference to it so client can query its internal structure
-                in separate request */
-            if (SUCCESS != get_var_ref(parent_type, parent, name, addr, type, 0, &ref)) {
-                RETCLEAN(FAILURE);
-            }
-            JSON_NEW_INT64_FIELD(item, "variablesReference", ref);
-            JSON_NEW_INT64_FIELD(item, "namedVariables", dim);
-            JSON_NEW_STRING_FIELD(item, "value", CSTR(tname));
-            RETCLEAN(SUCCESS);
-        case TKIND_POINTER:
-            flags = org_flags;
-            mem = get_var_value(addr, size, cur_step);
-            if (!mem) {
-                RETCLEAN(FAILURE);
-            }
-            addr = *(ULONG *)mem;
-            free(mem);
-            if (0 == addr) {
-                JSON_NEW_STRING_FIELD(item, "value", "NULL");
-                JSON_NEW_INT64_FIELD(item, "variablesReference", 0);
-                RETCLEAN(SUCCESS);
-            }
-            char tmp[32];
-            int ret = get_pointer_size(addr, &pointer_size);
-            if (MEM_RELEASED == ret) {
-                sprintf(tmp, "(%s)0x%" PRIx64 " (dangling)", CSTR(tname), addr);
-                JSON_NEW_STRING_FIELD(item, "value", tmp);
-                JSON_NEW_INT64_FIELD(item, "variablesReference", 0);
-                RETCLEAN(SUCCESS);
-            } else if (MEM_NOTFOUND == ret) {
-                sprintf(tmp, "(%s)0x%" PRIx64 " (invalid)", CSTR(tname), addr);
-                JSON_NEW_STRING_FIELD(item, "value", tmp);
-                JSON_NEW_INT64_FIELD(item, "variablesReference", 0);
-                RETCLEAN(SUCCESS);
-            } else if (SUCCESS != ret) {
-                RETCLEAN(FAILURE);
-            }
-            sprintf(tmp, "(%s)0x%" PRIx64, CSTR(tname), addr);
-            JSON_NEW_STRING_FIELD(item, "value", tmp);
-            value_added = 1;
-            if (!pointer_size) {
-                dim = 1;
-            }
-            /* FALLTHROUGH - process pointer as array */
-        case TKIND_ARRAY:
-            if (!indirect) {
-                /* check parent base type */
-                if (SUCCESS != get_type_size(base_type, &size, &dummy, &flags, &dummy)) {
-                    return FAILURE;
-                }
-            }
-            if (pointer_size) {
-                dim = pointer_size / size;      // number of base type elements in allocated pointer
-            }
-
-            /* normally it must be in pointer processing but I moved it here to be after query to base type */
-            if (TKIND_FUNC == (flags & TKIND_TYPE)) {
-                /* process function pointer - find function name */
-                char *fun_name;
-                char *value;
-                if (SUCCESS != func_name(addr, &fun_name)) {
-                    value = malloc(32);
-                    sprintf(value, "0x%" PRIx64 " (invalid)", addr);
-                } else {
-                    value = malloc(strlen(fun_name) + 32);
-                    sprintf(value, "0x%" PRIx64 " <%s>", addr, fun_name);
-                    free(fun_name);
-                }
-                JSON_NEW_STRING_FIELD(item, "value", value);
-                JSON_NEW_INT64_FIELD(item, "variablesReference", 0);
-                free(value);
-                RETCLEAN(SUCCESS);
-            }
-
-            if (size == 1 && (TKIND_SIGNED == (flags & TKIND_TYPE) || TKIND_UNSIGNED == (flags & TKIND_TYPE))) {
-                /* treat char pointer as string */
-                if (!pointer_size) {
-                    // string of unknown length, get first few characters
-                    dim = 32;
-                }
-                /* treat char pointer/array as string */
-                mem = get_var_value(addr, dim, cur_step);
-                if (!mem) {
-                    RETCLEAN(FAILURE);
-                }
-                size_t len = strnlen(mem, dim);
-                char *value = malloc(len + 32);
-                if (len == dim) {
-                    /* string is not 0-terminated or longer then limit */
-                    mem[dim] = '\0';   // mem has one extra byte for terminator
-                    sprintf(value, "0x%" PRIx64 " \"%s…\"", addr, mem);
-                } else {
-                    sprintf(value, "0x%" PRIx64 " \"%s\"", addr, mem);
-                }
-                free(mem);
-                /* TODO sanitise mem to be a valid JSON string */
-                JSON_NEW_STRING_FIELD(item, "value", value);
-                JSON_NEW_INT64_FIELD(item, "variablesReference", 0);
-                free(value);
-                RETCLEAN(SUCCESS);
-            }
-            /* for non-array pointer to struct/union add reference not to first (and only) item, but to struct itself */
-            if (dim == 1 && (TKIND_STRUCT == (flags & TKIND_TYPE) || TKIND_UNION == (flags & TKIND_TYPE))) {
-                if (SUCCESS != get_var_ref(parent_type, parent, name, addr, base_type, indirect, &ref)) {
-                    RETCLEAN(FAILURE);
-                }
-                // TODO: Add namedVariables with number of struct fields
-            } else {
-                if (SUCCESS != get_var_ref(parent_type, parent, name, addr, type, indirect, &ref)) {
-                    RETCLEAN(FAILURE);
-                }
-                JSON_NEW_INT64_FIELD(item, "indexedVariables", dim);
-            }
-            
-            if (!value_added) {      // add value with type, if not added by pointer code above
-                JSON_NEW_STRING_FIELD(item, "value", CSTR(tname));
-            }
-            JSON_NEW_INT64_FIELD(item, "variablesReference", ref);         
-            RETCLEAN(SUCCESS);
-        case TKIND_SIGNED:
-            mem = get_var_value(addr, size, cur_step);
-            if (!mem) {
-                RETCLEAN(FAILURE);
-            }
-            switch (size) {
-                case 1:
-                    if (isprint(*(int8_t *)mem)) {
-                        sprintf(new_val, "%" PRId8 " '%c'", *(int8_t *)mem, *(int8_t *)mem);
-                    } else {
-                        sprintf(new_val, "%" PRId8, *(int8_t *)mem);
-                    }
-                    break;
-                case 2:
-                    sprintf(new_val, "%" PRId16, *(int16_t *)mem);
-                    break;
-                case 4:
-                    sprintf(new_val, "%" PRId32, *(int32_t *)mem);
-                    break;
-                case 8:
-                    sprintf(new_val, "%" PRId64, *(int64_t *)mem);
-                    break;
-                default:
-                    ERR("Unsupported %" PRId64 "-byte long integer var %s", size, name);
-                    strcpy(new_val, "unsupported");
-                    break;
-            }
-            break;
-        case TKIND_UNSIGNED:
-            mem = get_var_value(addr, size, cur_step);
-            if (!mem) {
-                RETCLEAN(FAILURE);
-            }
-            switch (size) {
-                case 1:
-                    if (isprint(*(uint8_t *)mem)) {
-                        sprintf(new_val, "%" PRIu8 " '%c'", *(uint8_t *)mem, *(uint8_t *)mem);
-                    } else {
-                        sprintf(new_val, "%" PRIu8, *(uint8_t *)mem);
-                    }
-                    break;
-                case 2:
-                    sprintf(new_val, "%" PRIu16, *(uint16_t *)mem);
-                    break;
-                case 4:
-                    sprintf(new_val, "%" PRIu32, *(uint32_t *)mem);
-                    break;
-                case 8:
-                    sprintf(new_val, "%" PRIu64, *(uint64_t *)mem);
-                    break;
-                default:
-                    ERR("Unsupported %" PRId64 "-byte long integer var %s", size, name);
-                    strcpy(new_val, "unsupported");
-                    break;
-            }
-            break;
-        case TKIND_FLOAT:
-            mem = get_var_value(addr, size, cur_step);
-            if (!mem) {
-                RETCLEAN(FAILURE);
-            }
-            switch (size) {
-                case __SIZEOF_FLOAT__:
-                    sprintf(new_val, "%g", *(float *)mem);
-                    break;
-                case __SIZEOF_DOUBLE__:
-                    sprintf(new_val, "%lg", *(double *)mem);
-                    break;
-#if __SIZEOF_LONG_DOUBLE__ > __SIZEOF_DOUBLE__      // to avoid compile error with equal cases
-                case __SIZEOF_LONG_DOUBLE__:
-                    sprintf(new_val, "%Lg", *(long double *)mem);
-                    break;
-#endif
-                default:
-                    ERR("Unsupported %" PRId64 "-byte long float var %s", size, name);
-                    strcpy(new_val, "unsupported");
-                    break;
-            }
-            break;
-        case TKIND_ENUM:
-            mem = get_var_value(addr, size, cur_step);
-            if (!mem) {
-                RETCLEAN(FAILURE);
-            }
-            uint32_t value = 0;
-            new_val[0] = '\0';
-            switch (size) {                
-                case 1:
-                    value = *(uint8_t *)mem;
-                    break;
-                case 2:
-                    value = *(uint16_t *)mem;
-                    break;
-                case 4:
-                    value = *(uint32_t *)mem;
-                    break;
-                default:
-                    ERR("Unsupported %" PRId64 "-byte long enum %s", size, name);
-                    strcpy(new_val, "unsupported");
-                    break;
-            }
-            if (new_val[0]) {
-                break;
-            }
-            /* lookup enum item name by value */
-            if (!enum_cursor) {
-                if (DAB_OK != DAB_CURSOR_OPEN(&enum_cursor,
-                    "SELECT "
-                        "name "
-                    "FROM "
-                        "member "
-                    "WHERE "
-                        "offset = ? AND "
-                        "value = ?",
-                        type, value
-                )) {
-                    free(mem);
-                    RETCLEAN(FAILURE);
-                }
-            } else if (DAB_OK != DAB_CURSOR_RESET(enum_cursor) || DAB_OK != DAB_CURSOR_BIND(enum_cursor, type, value)) {
-                free(mem);
-                RETCLEAN(FAILURE);
-            }
-            char *item_name;
-            if (DAB_OK != DAB_CURSOR_FETCH(enum_cursor, &item_name)) {
-                sprintf(new_val, "%" PRIu32, value);
-            } else {
-                sprintf(new_val, "%s (%" PRIu32 ")", item_name, value);
-            }          
-            break;
-        default:
-            ERR("Type %" PRIu64 " not implemented yet", flags & TKIND_TYPE);
-            strcpy(new_val, "unsupported");
-            break;
-    }
-    JSON_NEW_INT64_FIELD(item, "variablesReference", 0);
-    JSON_NEW_STRING_FIELD(item, "value", new_val);
-
-    free(mem);
-
-cleanup:
-    STRFREE(tname);
-
-    return ret;
 }
 
 

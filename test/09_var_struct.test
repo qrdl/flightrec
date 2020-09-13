@@ -100,7 +100,7 @@ case "Global struct" {
 
         expect /body/variables[2]/name == "next"
         expect /body/variables[2]/variablesReference == 0
-        expect /body/variables[2]/value == NULL
+        expect /body/variables[2]/value == "(struct item*)NULL"
     }
 }
 
@@ -193,7 +193,7 @@ case "Local struct with pointer to struct" {
 
         expect /body/variables[2]/name == "next"
         expect /body/variables[2]/variablesReference == 0
-        expect /body/variables[2]/value == NULL
+        expect /body/variables[2]/value == "(struct item*)NULL"
     }
 }
 
@@ -261,7 +261,7 @@ case "Change global struct field" {
 
         expect /body/variables[2]/name == "next"
         expect /body/variables[2]/variablesReference == 0
-        expect /body/variables[2]/value == NULL
+        expect /body/variables[2]/value == "(struct item*)NULL"
     }
     # should be the same as we access the same structure in a different way
     request '{"command":"variables","arguments":{"variablesReference":$(second_next_ref) },"type":"request","seq":21}'
@@ -282,7 +282,7 @@ case "Change global struct field" {
 
         expect /body/variables[2]/name == "next"
         expect /body/variables[2]/variablesReference == 0
-        expect /body/variables[2]/value == NULL
+        expect /body/variables[2]/value == "(struct item*)NULL"
     }
 }
 
@@ -528,7 +528,7 @@ case "Array of structs" {
 
         expect /body/variables[2]/name == "next"
         expect /body/variables[2]/variablesReference == 0
-        expect /body/variables[2]/value == NULL
+        expect /body/variables[2]/value == "(struct item*)NULL"
     }
 }
 

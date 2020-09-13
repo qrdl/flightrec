@@ -873,16 +873,23 @@ int get_struct_details(const char *name, int64_t *offset, int *kind, size_t *siz
  **************************************************************************/
 int get_type_details(const char *name, int64_t *offset, int *kind, size_t *size) {
     if (!expr_type_cursor) {
+        // joining type_relation view to get real type for typedef'ed type
         if (DAB_OK != DAB_CURSOR_OPEN(&expr_type_cursor,
             "SELECT "
-                "offset, "
-                "flags & " STR(TKIND_TYPE) ", "
-                "size "
+                "t2.offset, "
+                "t2.flags & " STR(TKIND_TYPE) ", "
+                "t2.size "
             "FROM "
-                "type "
+                "type t1 "
+                "JOIN type_relation ON "
+                    "descendant = t1.offset "
+                "JOIN type t2 ON "
+                    "t2.offset = ancestor "
             "WHERE "
-                "flags & " STR(TKIND_TYPE) " NOT IN (" STR(TKIND_STRUCT) ", " STR(TKIND_UNION) ") AND "
-                "name = ?",
+                "(t1.flags & " STR(TKIND_TYPE) ") NOT IN (" STR(TKIND_STRUCT) ", " STR(TKIND_UNION) ") AND "
+                "t1.name = ? AND"
+                "(t2.flags & " STR(TKIND_TYPE) ") != " STR(TKIND_ALIAS) " "
+            "ORDER BY depth",
             name
         )) {
             ERR("Cannot prepare type cursor");
@@ -944,6 +951,7 @@ int get_var_details(const char *name, uint64_t scope, uint64_t *var_id,
                 "(v.scope_id = ? OR "
                     "v.scope_id IN (SELECT ancestor FROM scope_ancestor WHERE id = ?)"
                 ") AND "
+                "tr.flags & " STR(TKIND_TYPE) " != " STR(TKIND_ALIAS) " AND "
                 "a.indirect = 0 AND "
                 "v.name = ? "
             "ORDER BY "

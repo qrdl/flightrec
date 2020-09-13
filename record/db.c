@@ -253,12 +253,12 @@ int alter_db(void) {
        so parent type not really an ancestor type in such cases */
     if (DAB_OK != DAB_EXEC("CREATE VIEW type_relation AS "
             "WITH RECURSIVE "
-                "relation(ancestor, descendant, depth) AS ( "
-                "SELECT offset, offset, 0 FROM type "
+                "relation(p, ancestor, descendant, flags, depth) AS ( "
+                "SELECT parent, offset, offset, flags, 0 FROM type "
                 "UNION "
-                "SELECT parent, descendant, depth+1 FROM type JOIN relation ON offset=relation.ancestor "
+                "SELECT parent, offset, descendant, type.flags, depth+1 FROM type JOIN relation ON offset=relation.p "
             ") "
-            "SELECT ancestor, descendant, depth FROM relation")) {
+            "SELECT ancestor, descendant, flags, depth FROM relation")) {
         return FAILURE;
     }
 
