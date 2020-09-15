@@ -90,7 +90,7 @@
 struct ast_node {
     int         node_type;
     /* datatype attrbites */
-    int64_t    type_offset;     // can be negative for casting to basic type
+    int64_t     type_offset;    // can be negative for casting to basic type
     int         type_kind;      // one of TKIND_XXX constants
     size_t      size;
     int         indirect;       // number of indirections, e.g. how many dereferences needed to get the value

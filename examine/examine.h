@@ -57,7 +57,10 @@ char *get_var_value(ULONG addr, size_t size, uint64_t step);
 int get_var_ref(int parent_type, ULONG parent, const char *child, ULONG address, ULONG type, int indirect, ULONG *ref);
 struct sr *type_name(int64_t type_offset, int indirect);
 int get_pointer_size(ULONG address, ULONG *size);
-int get_type_size(int64_t offset, uint64_t *size, uint64_t *dim, uint64_t *flags, uint64_t *base_type);
+int get_type_size(int64_t offset, uint64_t *size, uint64_t *dim, uint64_t *flags, int64_t *base_type);
+
+int format_var(ULONG addr, int final, int64_t type, int indirect,
+               char **value, int *indexed, int *named, ULONG *ref_addr, ULONG *ref_type);
 
 void release_cursors(void);
 

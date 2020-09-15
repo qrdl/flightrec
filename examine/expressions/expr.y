@@ -43,6 +43,7 @@
         ast->type_kind = TKIND_FLOAT; \
         ast->size = sizeof(double); \
         ast->operand = (A); \
+        ast->type_offset = -1 * ((ast->size << 8) + TKIND_FLOAT); \
         ast; })
 
 #define CAST_TO_SIGNED(A) ({ \
@@ -50,6 +51,7 @@
         ast->type_kind = TKIND_SIGNED; \
         ast->size = sizeof(int64_t); \
         ast->operand = (A); \
+        ast->type_offset = -1 * ((ast->size << 8) + TKIND_SIGNED); \
         ast; })
 
 
@@ -651,19 +653,23 @@ struct ast_node *binary_op(struct ast_node *left, struct ast_node *right, int op
     if (TKIND_FLOAT == left->type_kind || TKIND_FLOAT == right->type_kind) {
         res->type_kind = TKIND_FLOAT;
         res->size = sizeof(double);
+        res->type_offset = -1 * ((res->size << 8) + TKIND_FLOAT);
         promote_operands_to_double(res, left, right);
     } else if (TKIND_SIGNED == left->type_kind || TKIND_SIGNED == right->type_kind) {
         res->type_kind = TKIND_SIGNED;
         res->size = sizeof(int64_t);
+        res->type_offset = -1 * ((res->size << 8) + TKIND_SIGNED);
         promote_operands_to_signed(res, left, right);
     } else {
         /* subtraction may result in negative value even for unsigned values */
         if (OP_SUB == op_type) {
             res->type_kind = TKIND_SIGNED;
             res->size = sizeof(uint64_t);
+            res->type_offset = -1 * ((res->size << 8) + TKIND_SIGNED);
         } else {
             res->type_kind = TKIND_UNSIGNED;
             res->size = sizeof(uint64_t);
+            res->type_offset = -1 * ((res->size << 8) + TKIND_UNSIGNED);
         }
         res->left = left;
         res->right = right;

@@ -53,7 +53,6 @@ static union node_value float_bin_op(struct ast_node *ast, uint64_t step, char *
 static union node_value signed_bin_op(struct ast_node *ast, uint64_t step, char **error);
 static union node_value unsigned_bin_op(struct ast_node *ast, uint64_t step, char **error);
 static union node_value var_value(struct ast_node *ast, uint64_t addr, uint64_t step, char **error);
-static int type_details(int64_t type_offset, uint64_t *dim, uint64_t *type_kind);
 
 static void *expr_struct_cursor;
 static void *expr_type_cursor;
@@ -82,7 +81,6 @@ static void *expr_typedetails_cursor;
  **************************************************************************/
 int get_eval_result(JSON_OBJ *container, uint64_t id, struct ast_node *ast, uint64_t step, char **error) {
     int ret = SUCCESS;
-    struct sr *tname;
 
     /* for basic type get variable value and format according to type */
     if (!ast->indirect && ast->type_kind >= TKIND_BASIC_MIN && ast->type_kind <= TKIND_BASIC_MAX) {
@@ -114,123 +112,48 @@ int get_eval_result(JSON_OBJ *container, uint64_t id, struct ast_node *ast, uint
         return SUCCESS;
     }
 
-    ULONG ref;
-    ULONG pointer_size = 0;
-    char *mem = NULL;
-    tname = type_name(ast->type_offset, ast->indirect);
-    int value_added = 0;
-    uint64_t addr, dim, under_kind;
-
-    /* get details of underlying type */
-    if (ast->type_offset && SUCCESS != type_details(ast->type_offset, &dim, &under_kind)) {
-        *error = "Cannot get type details";
-        RETCLEAN(FAILURE);
+    union node_value res = evaluate_node(ast, step, FLAG_ADDR, error);
+    if (*error) {
+        return FAILURE;
     }
 
-    if (!ast->indirect && TKIND_STRUCT == ast->type_kind) {         // struct
-        union node_value res = evaluate_node(ast, step, FLAG_ADDR, error);
-        if (*error) {
-            RETCLEAN(FAILURE);    // evaluation failed
-        }
-        addr = res.unsigned_value;
+    char *value = NULL;
+    ULONG addr = res.unsigned_value;
+    ULONG ref_type;
+    int indexed, named;
 
-        /* process compound variable by adding the reference to it so client can query its internal structure
-            in separate request */
-        if (SUCCESS != get_var_ref(PTYPE_EXPR, id, "", addr, ast->type_offset, 0, &ref)) {
-            RETCLEAN(FAILURE);
-        }
-        JSON_NEW_INT64_FIELD(container, "variablesReference", ref);
-        JSON_NEW_INT64_FIELD(container, "namedVariables", dim);
-        JSON_NEW_STRING_FIELD(container, "result", CSTR(tname));
-        RETCLEAN(SUCCESS);
-    } else {        // pointer or array
-        if (ast->indirect) {    // pointer
-            /* pointer */
-            union node_value res = evaluate_node(ast, step, NO_FLAGS, error);
-            if (*error) {
-                RETCLEAN(FAILURE);    // evaluation failed
-            }
-            addr = res.unsigned_value;
-            if (0 == addr) {
-                JSON_NEW_STRING_FIELD(container, "result", "NULL");
-                RETCLEAN(SUCCESS);
-            }
-            char tmp[32];
-            int ret = get_pointer_size(addr, &pointer_size);
-            if (MEM_RELEASED == ret) {
-                sprintf(tmp, "(%s)0x%" PRIx64 " (dangling)", CSTR(tname), addr);
-                JSON_NEW_STRING_FIELD(container, "result", tmp);
-                JSON_NEW_INT64_FIELD(container, "variablesReference", 0);
-                RETCLEAN(SUCCESS);
-            } else if (MEM_NOTFOUND == ret) {
-                sprintf(tmp, "(%s)0x%" PRIx64 " (invalid)", CSTR(tname), addr);
-                JSON_NEW_STRING_FIELD(container, "result", tmp);
-                JSON_NEW_INT64_FIELD(container, "variablesReference", 0);
-                RETCLEAN(SUCCESS);
-            } else if (SUCCESS != ret) {
-                RETCLEAN(FAILURE);
-            }
-            sprintf(tmp, "(%s)0x%" PRIx64, CSTR(tname), addr);
-            JSON_NEW_STRING_FIELD(container, "result", tmp);
-            value_added = 1;
-            if (!pointer_size) {
-                dim = 1;
-            } else {
-                dim = pointer_size / ast->size;     // number of base type elements in allocated pointer
-            }
-            // TODO function pointer
-        } else {    // array
-            union node_value res = evaluate_node(ast, step, FLAG_ADDR, error);
-            if (*error) {
-                RETCLEAN(FAILURE);    // evaluation failed
-            }
-            addr = res.unsigned_value;
-        }
-
-        /* common code - threat array and pointer in the same way */
-
-        if (ast->size == 1 && (TKIND_SIGNED == under_kind || TKIND_UNSIGNED == under_kind)) {
-            /* treat char pointer as string */
-            if (!pointer_size) {
-                // string of unknown length, get first few characters
-                dim = 32;
-            }
-            /* treat char pointer/array as string */
-            mem = get_var_value(addr, dim, cur_step);
-            if (!mem) {
-                RETCLEAN(FAILURE);
-            }
-            size_t len = strnlen(mem, dim);
-            char *value = malloc(len + 32);
-            if (len == dim) {
-                /* string is not 0-terminated or longer then limit */
-                mem[dim] = '\0';   // mem has one extra byte for terminator
-                sprintf(value, "0x%" PRIx64 " \"%s…\"", addr, mem);
-            } else {
-                sprintf(value, "0x%" PRIx64 " \"%s\"", addr, mem);
-            }
-            free(mem);
-            /* TODO sanitise mem to be a valid JSON string */
-            JSON_NEW_STRING_FIELD(container, "result", value);
-            JSON_NEW_INT64_FIELD(container, "variablesReference", 0);
-            free(value);
-            RETCLEAN(SUCCESS);
-        }
-
-        if (SUCCESS != get_var_ref(PTYPE_EXPR, id, "", addr, ast->type_offset, ast->indirect, &ref)) {
-            RETCLEAN(FAILURE);
-        }
-
-        if (!value_added) {      // add value with type, if not added by pointer code above
-            JSON_NEW_STRING_FIELD(container, "result", CSTR(tname));
-        }
-        JSON_NEW_INT64_FIELD(container, "variablesReference", ref);
-        JSON_NEW_INT64_FIELD(container, "indexedVariables", dim);
-        RETCLEAN(SUCCESS);
+    ret = format_var(
+            addr,
+            1,          // address is final
+            ast->type_offset,
+            ast->indirect,
+            &value,
+            &indexed,
+            &named,
+            &addr,
+            &ref_type);
+    if (SUCCESS != ret) {
+        *error = "Cannot format result";
+        return FAILURE;
     }
 
-cleanup:
-    STRFREE(tname);
+    JSON_NEW_STRING_FIELD(container, "result", value);
+    free(value);
+    if (indexed || named) {
+        ULONG ref;
+        if (SUCCESS != get_var_ref(PTYPE_EXPR, id, "", addr, ref_type, ast->indirect, &ref)) {
+            *error = "Cannot add reference";
+            return FAILURE;
+        }
+        JSON_NEW_INT64_FIELD(container, "variablesReference", ref);
+        if (indexed) {
+            JSON_NEW_INT64_FIELD(container, "indexedVariables", indexed);
+        } else {
+            JSON_NEW_INT64_FIELD(container, "namedVariables", named);
+        }
+    } else {
+        JSON_NEW_INT64_FIELD(container, "variablesReference", 0);
+    }
 
     return ret;
 }
@@ -271,7 +194,7 @@ union node_value evaluate_node(struct ast_node *ast, uint64_t step, int flags, c
                 *error = "Cannot get variable address";
                 return (union node_value){ .pointer_value = NULL };
             }
-            if (FLAG_ADDR == flags) {
+            if (FLAG_ADDR == flags && !ast->indirect) {
                 return (union node_value){ .unsigned_value = addr};    // parent node needs only address
             }
             return var_value(ast, addr, step, error);
@@ -298,8 +221,9 @@ union node_value evaluate_node(struct ast_node *ast, uint64_t step, int flags, c
                 return (union node_value){ .pointer_value = NULL };
             }
             uint64_t index = evaluate_node(ast->member, step, NO_FLAGS, error).unsigned_value;
-            uint64_t dim, size, dummy;
-            int ret = get_type_size(ast->object->type_offset, &size, &dim, &dummy, &dummy);
+            uint64_t dim, size;
+            int64_t dummy;
+            int ret = get_type_size(ast->object->type_offset, &size, &dim, (uint64_t *)&dummy, &dummy);
             if (SUCCESS == ret) {
                 if (!dim || ast->object->indirect) {
                     ret = get_pointer_size(addr, &dim);
@@ -670,7 +594,7 @@ union node_value unsigned_bin_op(struct ast_node *ast, uint64_t step, char **err
  *
  **************************************************************************/
 union node_value var_value(struct ast_node *ast, uint64_t addr, uint64_t step, char **error) {
-    char *value = get_var_value(addr, ast->size, step);
+    char *value = get_var_value(addr, ast->indirect ? sizeof(char *) : ast->size, step);
     if (!value) {
         *error = "Cannot get variable value";
         return (union node_value){ .pointer_value = NULL };
@@ -1210,49 +1134,6 @@ int update_expr_cache(uint64_t id, struct ast_node *ast) {
     }
     int ret = DAB_CURSOR_FETCH(expr_updexpr_cursor);
     if (DAB_NO_DATA != ret) {
-        return FAILURE;
-    }
-
-    return SUCCESS;
-}
-
-
-/**************************************************************************
- *
- *  Function:   type_details
- *
- *  Params:     type_offset
- *              dim - where to store array dimension/field count
- *              type_kind - where to store base type's kind
- *
- *  Return:     SUCCESS / FAILURE
- *
- *  Descr:      Find details about type
- *
- **************************************************************************/
-int type_details(int64_t type_offset, uint64_t *dim, uint64_t *type_kind) {
-    if (!expr_typedetails_cursor) {
-        if (DAB_OK != DAB_CURSOR_PREPARE(&expr_typedetails_cursor, "SELECT "
-                "t.dim, "
-                "IFNULL(p.flags & " STR(TKIND_TYPE) ", t.size) "
-            "FROM "
-                "type t "
-                "LEFT JOIN type p ON p.offset = t.parent "
-            "WHERE "
-                "t.offset  = ?"
-        )) {
-            ERR("Cannot prepare type details query");
-            return FAILURE;
-        }
-    }
-
-    if ( DAB_OK != DAB_CURSOR_RESET(expr_typedetails_cursor) ||
-                DAB_OK != DAB_CURSOR_BIND(expr_typedetails_cursor, type_offset)) {
-        ERR("Cannot bind expr cache update cursor");
-        return FAILURE;
-    }
-    int ret = DAB_CURSOR_FETCH(expr_typedetails_cursor, dim, type_kind);
-    if (DAB_OK != ret) {
         return FAILURE;
     }
 

@@ -169,18 +169,21 @@ case "Pointer to single struct" {
         expect /request_seq == 14
         expect /success == true
         expect /body/result =~ "(struct bar\*)0x[0-9a-f]*"
-        expect /body/indexedVariables == 1
+        expect /body/namedVariables == 2
         set cur1_ref = /body/variablesReference
     }
-    request '{"command":"variables","arguments":{"variablesReference":$(cur1_ref), "filter":"indexed", "start": 0, "count": 1 },"type":"request","seq":15}'
+    request '{"command":"variables","arguments":{"variablesReference":$(cur1_ref), "filter":"named", "start": 0, "count": 2 },"type":"request","seq":15}'
     response {
         expect /type == "response"
         expect /command == variables
         expect /request_seq == 15
         expect /success == true
 
-        expect /body/variables[0]/name == "[0]"
-        expect /body/variables[0]/value == "struct bar"
+        expect /body/variables[0]/name == "a"
+        expect /body/variables[0]/value == 1
+
+        expect /body/variables[1]/name == "b"
+        expect /body/variables[1]/value == 1.01
     }
 }
 
@@ -303,7 +306,7 @@ case "String (char array)" {
     }
 }
 
-case "String character" {
+case "String (char array) character" {
     request '{"command":"evaluate","arguments":{"expression":"qwe[10]","frameId":0,"context":"watch"},"type":"request","seq":23}'
     response {
         expect /type == "response"
@@ -314,7 +317,7 @@ case "String character" {
     }
 }
 
-case "String starting from specified index" {
+case "String (char array) starting from specified index" {
     request '{"command":"evaluate","arguments":{"expression":"(char *)qwe+10","frameId":0,"context":"watch"},"type":"request","seq":24}'
     response {
         expect /type == "response"
@@ -379,5 +382,81 @@ case "Logical expression with numeric comparison" {
         expect /body/result == 1
     }
 }
+
+case "String (char pointer)" {
+    # go back to the line where zzz has the value
+    request '{"command":"setBreakpoints","arguments":{"source":{"name":"test01_a.c","path":"$(path)/test01_a.c"},"lines":[50, 57],"breakpoints":[{"line":50},{"line":57}],"sourceModified":false},"type":"request","seq":30}'
+    response {
+        expect /type == "response"
+        expect /command == setBreakpoints
+        expect /request_seq == 30
+        expect /success == true
+
+        expect /body/breakpoints[0]/id == 2
+        expect /body/breakpoints[0]/verified == true
+
+        expect /body/breakpoints[1]/id == 3
+        expect /body/breakpoints[1]/verified == true
+    }
+    request '{"command":"reverseContinue","arguments":{"threadId":1},"type":"request","seq":31}'
+    response {
+        expect /type == "response"
+        expect /command == reverseContinue
+        expect /request_seq == 31
+        expect /success == true
+    }
+    response {
+        expect /type == event
+        expect /event == stopped
+        expect /body/reason == breakpoint
+    }
+    request '{"command":"stackTrace","arguments":{"threadId":1,"startFrame":0,"levels":20},"type":"request","seq":32}'
+    response {
+        expect /type == "response"
+        expect /command == stackTrace
+        expect /request_seq == 32
+        expect /success == true
+        expect /body/totalFrames == 1
+
+        expect /body/stackFrames[0]/name == main
+        expect /body/stackFrames[0]/id == 0
+        expect /body/stackFrames[0]/line == 50
+        expect /body/stackFrames[0]/column == 0
+        expect /body/stackFrames[0]/source/name == test01_a.c
+        expect /body/stackFrames[0]/source/path == "$(path)/test01_a.c"
+        expect /body/stackFrames[0]/source/sourceReference == 0
+    }
+    request '{"command":"evaluate","arguments":{"expression":"zzz","frameId":0,"context":"watch"},"type":"request","seq":33}'
+    response {
+        expect /type == "response"
+        expect /command == evaluate
+        expect /request_seq == 33
+        expect /success == true
+        expect /body/result =~ '0x[a-z0-9]* "gvcbs"'
+    }
+}
+
+case "String (char pointer) character" {
+    request '{"command":"evaluate","arguments":{"expression":"zzz[2]","frameId":0,"context":"watch"},"type":"request","seq":34}'
+    response {
+        expect /type == "response"
+        expect /command == evaluate
+        expect /request_seq == 34
+        expect /success == true
+        expect /body/result == "99 'c'"
+    }
+}
+
+case "String (char pointer) starting from specified index" {
+    request '{"command":"evaluate","arguments":{"expression":"zzz+2","frameId":0,"context":"watch"},"type":"request","seq":35}'
+    response {
+        expect /type == "response"
+        expect /command == evaluate
+        expect /request_seq == 35
+        expect /success == true
+        expect /body/result =~ '0x[a-z0-9]* "cbs"'
+    }
+}
+
 
 stop

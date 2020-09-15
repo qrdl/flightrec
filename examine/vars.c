@@ -86,8 +86,6 @@ static int get_location(Dwarf_Attribute attrib, REG_TYPE pc, LLONG base_addr, st
 static int add_var_entry(JSON_OBJ *container, int parent_type, ULONG parent, char *name, ULONG addr,
                         ULONG type, int indirect);
 static int func_name(ULONG address, char **name);
-int format_var(ULONG addr, ULONG type, int indirect, ULONG type_flags, ULONG type_size, 
-               char **value, int *indexed, int *named, ULONG *ref_addr, ULONG *ref_type);
 
 
 /**************************************************************************
@@ -307,7 +305,7 @@ int add_var_entry(JSON_OBJ *container, int parent_type, ULONG parent, char *name
     char *value = NULL;
     int indexed, named;
 
-    int ret = format_var(addr, type, indirect, 0, 0, &value, &indexed, &named, &addr, &type);
+    int ret = format_var(addr, 0, type, indirect, &value, &indexed, &named, &addr, &type);
     if (SUCCESS == ret) {
         JSON_OBJ *item = JSON_ADD_NEW_ITEM(container);
         JSON_NEW_STRING_FIELD(item, "name", name);
@@ -338,62 +336,66 @@ int add_var_entry(JSON_OBJ *container, int parent_type, ULONG parent, char *name
  *  Function:   format_var
  *
  *  Params IN:  addr - var address
- *              type - type offset (can be 0 for standard types)
+ *              final - if 0, address is address of variable,
+ *                      if 1, address is value of the pointer (no further
+ *                      evaluation needed)
+ *              type - type offset (negative for standard types)
  *              indirect - number of indirections
- *              type_flags - TKIND_XXX flags for types, used only when type
- *                           is 0
- *              type_size - size of type, used only when type is 0
  *  Params OUT: value - value to display
  *              indexed - number of indexed items (only if complex var)
  *              named - number of named items (only if complex var)
  *              ref_addr - address to use for reference
+ *              ref_type - type offset to use for reference
  *
  *  Return:     SUCCESS / FAILURE
  *
  *  Descr:      Format variable according to type
  *
  **************************************************************************/
-int format_var(ULONG addr, ULONG type, int indirect, ULONG type_flags, ULONG type_size, 
+int format_var(ULONG addr, int final, int64_t type, int indirect,
                char **value, int *indexed, int *named, ULONG *ref_addr, ULONG *ref_type) {
     char *mem = NULL;
     int ret = SUCCESS;
-    ULONG dim = 0, base_type = 0;
+    ULONG dim = 0;
+    int64_t base_type = 0;
     struct sr *tname = NULL;
+    ULONG type_size, type_flags;
 
     *named = 0;
     *indexed = 0;
     *value = NULL;
 
-    if (type) {
-        /* specified type offset - get other type attributes from debug info */
-        if (SUCCESS != get_type_size(type, &type_size, &dim, &type_flags, &base_type)) {
+    if (SUCCESS != get_type_size(type, &type_size, &dim, &type_flags, &base_type)) {
+        return FAILURE;
+    }
+
+    tname = type_name(type, indirect);
+    while (TKIND_ALIAS == type_flags) {
+        type = base_type;
+        /* typedef'ed type - drill down to actual type */
+        if (SUCCESS != get_type_size(base_type, &type_size, &dim, &type_flags, &base_type)) {
             return FAILURE;
         }
-
-        tname = type_name(type, indirect);
-        while (TKIND_ALIAS == type_flags) {
-            type = base_type;
-            /* typedef'ed type - drill down to actual type */
-            if (SUCCESS != get_type_size(base_type, &type_size, &dim, &type_flags, &base_type)) {
-                return FAILURE;
-            }
-        }
-    } else {
-        // TODO: Fill tname for basic type
     }
+
     *ref_type = type;
+    if (!base_type) {
+        base_type = type;
+    }
 
     /* format variable value for basic types */
     char new_val[64];
     ULONG pointer_size = 0;
-    ULONG dummy, field_count = 0;
-
-    // hack to force pointer processing
-    int org_flags = type_flags;
+    ULONG field_count = 0;
+    int64_t dummy;
+    int type_kind;
     if (indirect) {
-        type_flags = TKIND_POINTER;
+        type_kind = TKIND_POINTER;
+    } else {
+        type_kind = type_flags & TKIND_TYPE;
     }
-    switch (type_flags & TKIND_TYPE) {
+
+    switch (type_kind) {
         /* container type */
         case TKIND_STRUCT:  /* FALLTHROUGH */
         case TKIND_UNION:
@@ -403,14 +405,15 @@ int format_var(ULONG addr, ULONG type, int indirect, ULONG type_flags, ULONG typ
 
         /* array/pointer type */
         case TKIND_POINTER:
-            type_flags = org_flags;
-            mem = get_var_value(addr, type_size, cur_step);
-            if (!mem) {
-                RETCLEAN(FAILURE);
+            if (!final) {
+                mem = get_var_value(addr, sizeof(char *), cur_step);
+                if (!mem) {
+                    RETCLEAN(FAILURE);
+                }
+                addr = *(ULONG *)mem;
+                free(mem);
             }
-            addr = *(ULONG *)mem;
             *ref_addr = addr;
-            free(mem);
             char tmp[32];
             if (0 == addr) {
                 sprintf(tmp, "(%s)NULL", CSTR(tname));
@@ -1128,7 +1131,7 @@ int get_pointer_size(ULONG address, ULONG *size) {
  *  Descr:      Look for pointer content regardless of its location
  *
  **************************************************************************/
-int get_type_size(int64_t offset, uint64_t *size, uint64_t *dim, uint64_t *flags, uint64_t *base_type) {
+int get_type_size(int64_t offset, uint64_t *size, uint64_t *dim, uint64_t *flags, int64_t *base_type) {
     if (!type_cursor) {
         if (DAB_OK != DAB_CURSOR_OPEN(&type_cursor,
             "SELECT "
