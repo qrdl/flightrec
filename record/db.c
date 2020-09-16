@@ -270,8 +270,9 @@ int alter_db(void) {
         return FAILURE;
     }
 
-    // TODO it sets indirecton incorrectly for types, derived from custom pointer types, check impact on expressions
     /* set indirections for types, derived from pointers */
+    // for types, derived from custom pointer types, it sets indirect one larger then previous
+    // ancestor pointer type
     if (DAB_OK != DAB_EXEC("UPDATE type SET indirect = indirect+1 "
             "WHERE "
                 "rowid IN ("

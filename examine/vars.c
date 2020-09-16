@@ -465,7 +465,8 @@ int format_var(ULONG addr, int final, int64_t type, int indirect,
                 RETCLEAN(SUCCESS);
             }
 
-            if (type_size == 1 && (TKIND_SIGNED == (type_flags & TKIND_TYPE) || TKIND_UNSIGNED == (type_flags & TKIND_TYPE))) {
+            if (type_size == 1 && indirect <= 1 &&
+                    (TKIND_SIGNED == (type_flags & TKIND_TYPE) || TKIND_UNSIGNED == (type_flags & TKIND_TYPE))) {
                 /* treat char pointer as string */
                 if (!pointer_size) {
                     // string of unknown length, get first few characters
@@ -477,6 +478,7 @@ int format_var(ULONG addr, int final, int64_t type, int indirect,
                     RETCLEAN(FAILURE);
                 }
                 size_t len = strnlen(mem, dim);
+                free(*value);
                 *value = malloc(len + 32);
                 if (len == dim) {
                     /* string is not 0-terminated or longer then limit */

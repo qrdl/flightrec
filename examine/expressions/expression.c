@@ -863,20 +863,17 @@ int get_var_details(const char *name, uint64_t scope, uint64_t *var_id,
                 "a.offset, "
                 "a.flags & " STR(TKIND_TYPE) ", "
                 "a.size, "
-                "t.indirect "
+                "a.indirect "
             "FROM "
                 "var v "
-                "JOIN type t ON t.offset = v.type_offset "
                 "JOIN type_relation tr ON "
-                    "tr.descendant = t.offset "
+                    "tr.descendant = v.type_offset "
                 "JOIN type a ON "
                     "a.offset = tr.ancestor "
             "WHERE "
                 "(v.scope_id = ? OR "
                     "v.scope_id IN (SELECT ancestor FROM scope_ancestor WHERE id = ?)"
                 ") AND "
-                "tr.flags & " STR(TKIND_TYPE) " != " STR(TKIND_ALIAS) " AND "
-                "a.indirect = 0 AND "
                 "v.name = ? "
             "ORDER BY "
                 "depth",
@@ -891,10 +888,20 @@ int get_var_details(const char *name, uint64_t scope, uint64_t *var_id,
         return FAILURE;
     }
 
-    int ret = DAB_CURSOR_FETCH(expr_var_cursor, var_id, type_offset, kind, size, indirect);
-    if (DAB_OK != ret) {
-        return FAILURE;
-    }
+    /* There could be complex type configs, when type a is a typedef for type *b,
+       where type b is another typdef'd type and so on, so we need to drill down
+       to actual type, finding max possible indirections in the process */
+    *indirect = 0;
+    int indir;
+    do {
+        int ret = DAB_CURSOR_FETCH(expr_var_cursor, var_id, type_offset, kind, size, &indir);
+        if (DAB_OK != ret) {
+            return FAILURE;
+        }
+        if (indir > *indirect) {
+            *indirect = indir;
+        }
+    } while (*kind == TKIND_ALIAS || *kind == TKIND_POINTER);
 
     return SUCCESS;
 }
